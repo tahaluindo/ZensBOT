@@ -31,22 +31,22 @@ const ownernya = ownernomer + '@s.whatsapp.net'
 //TIME
 const time2 = moment().tz('Asia/Jakarta').format('HH:mm:ss')  
  if(time2 < "23:59:00"){
-var ucapanWaktu = 'Selamat Malam 🌌'
+var ucapanWaktu = 'Selamat Malam ??'
  }
  if(time2 < "19:00:00"){
-var ucapanWaktu = 'Selamat Sore 🌃'
+var ucapanWaktu = 'Selamat Sore ??'
  }
  if(time2 < "18:00:00"){
-var ucapanWaktu = 'Selamat Sore 🌅'
+var ucapanWaktu = 'Selamat Sore ??'
  }
  if(time2 < "15:00:00"){
-var ucapanWaktu = 'Selamat Siang 🏙'
+var ucapanWaktu = 'Selamat Siang ??'
  }
  if(time2 < "11:00:00"){
-var ucapanWaktu = 'Selamat Pagi 🌄'
+var ucapanWaktu = 'Selamat Pagi ??'
  }
  if(time2 < "05:00:00"){
-var ucapanWaktu = 'Selamat Pagi 🌉'
+var ucapanWaktu = 'Selamat Pagi ??'
  } 
 
 // read database
@@ -66,7 +66,7 @@ module.exports = zens = async (zens, m, chatUpdate, store) => {
     try {
         var body = (m.mtype === 'conversation') ? m.message.conversation : (m.mtype == 'imageMessage') ? m.message.imageMessage.caption : (m.mtype == 'videoMessage') ? m.message.videoMessage.caption : (m.mtype == 'extendedTextMessage') ? m.message.extendedTextMessage.text : (m.mtype == 'buttonsResponseMessage') ? m.message.buttonsResponseMessage.selectedButtonId : (m.mtype == 'listResponseMessage') ? m.message.listResponseMessage.singleSelectReply.selectedRowId : (m.mtype == 'templateButtonReplyMessage') ? m.message.templateButtonReplyMessage.selectedId : (m.mtype === 'messageContextInfo') ? (m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply.selectedRowId || m.text) : ''
         var budy = (typeof m.text == 'string' ? m.text : '')
-        var prefix = prefa ? /^[°•π÷×¶∆£¢€¥®™+✓_=|~!?@#$%^&.©^]/gi.test(body) ? body.match(/^[°•π÷×¶∆£¢€¥®™+✓_=|~!?@#$%^&.©^]/gi)[0] : "" : prefa ?? global.prefix
+        var prefix = prefa ? /^[°•p÷×¶?£¢€¥®™+?_=|~!?@#$%^&.©^]/gi.test(body) ? body.match(/^[°•p÷×¶?£¢€¥®™+?_=|~!?@#$%^&.©^]/gi)[0] : "" : prefa ?? global.prefix
         const isCmd = body.startsWith(prefix)
         const command = body.replace(prefix, '').trim().split(/ +/).shift().toLowerCase()
         const args = body.trim().split(/ +/).slice(1)
@@ -101,26 +101,26 @@ module.exports = zens = async (zens, m, chatUpdate, store) => {
     	const isAdmins = m.isGroup ? groupAdmins.includes(m.sender) : false
     	const isPremium = isCreator || global.premium.map(v => v.replace(/[^0-9]/g, '') + '@s.whatsapp.net').includes(m.sender) || false
         const sotoy = [
-		'🍊 : 🍒 : 🍐',
-		'🍒 : 🔔 : 🍊',
-		'🍇 : 🍇 : 🍇',
-		'🍊 : 🍋 : 🔔',
-		'🔔 : 🍒 : 🍐',
-		'🔔 : 🍒 : 🍊',
-        '🍊 : 🍋 : 🔔',		
-		'🍐 : 🍒 : 🍋',
-		'🍐 : 🍐 : 🍐',
-		'🍊 : 🍒 : 🍒',
-		'🔔 : 🔔 : 🍇',
-		'🍌 : 🍒 : 🔔',
-		'🍐 : 🔔 : 🔔',
-		'🍊 : 🍋 : 🍒',
-		'🍋 : 🍋 : 🍌',
-		'🔔 : 🔔 : 🍇',
-		'🔔 : 🍐 : 🍇',
-		'🔔 : 🔔 : 🔔  Win',
-		'🍒 : 🍒 : 🍒 Win',
-		'🍌 : 🍌 : 🍌 Lose'
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+        '?? : ?? : ??',		
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??  Win',
+		'?? : ?? : ?? Win',
+		'?? : ?? : ?? Lose'
 		]
 	
 	
@@ -204,7 +204,7 @@ module.exports = zens = async (zens, m, chatUpdate, store) => {
 	  // Anti Link
         if (db.data.chats[m.chat].antilink) {
         if (budy.match(`chat.whatsapp.com`)) {
-        m.reply(`「 *ANTI LINK* 」\n\n*Kamu terdeteksi mengirim link group*, *maaf kamu akan di kick‼️,yang mau juga silahkan kirim link‼️*`)
+        m.reply(`? *ANTI LINK* ?\n\n*Kamu terdeteksi mengirim link group*, *maaf kamu akan di kick??,yang mau juga silahkan kirim link??*`)
         if (!isBotAdmins) return m.reply(`*Bot aja bukan admin anj*`)
         let gclink = (`https://chat.whatsapp.com/`+await zens.groupInviteCode(m.chat))
         let isLinkThisGc = new RegExp(gclink, 'i')
@@ -267,7 +267,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             kuis = true
             jawaban = tebaklagu[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lagu', buttonText: { displayText: 'Tebak Lagu' }, type: 1 }], `🎮 Tebak Lagu 🎮\n\nJawaban Benar 🎉\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lagu', buttonText: { displayText: 'Tebak Lagu' }, type: 1 }], `?? Tebak Lagu ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
                 delete tebaklagu[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
         }
@@ -276,7 +276,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             kuis = true
             jawaban = kuismath[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await m.reply(`🎮 Kuis Matematika  🎮\n\nJawaban Benar 🎉\n\nIngin bermain lagi? kirim ${prefix}math mode`)
+                await m.reply(`?? Kuis Matematika  ??\n\nJawaban Benar ??\n\nIngin bermain lagi? kirim ${prefix}math mode`)
                 delete kuismath[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
         }
@@ -285,7 +285,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             kuis = true
             jawaban = tebakgambar[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak gambar', buttonText: { displayText: 'Tebak Gambar' }, type: 1 }], `🎮 Tebak Gambar 🎮\n\nJawaban Benar 🎉\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak gambar', buttonText: { displayText: 'Tebak Gambar' }, type: 1 }], `?? Tebak Gambar ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
                 delete tebakgambar[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
         }
@@ -294,7 +294,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             kuis = true
             jawaban = tebakkata[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak kata', buttonText: { displayText: 'Tebak Kata' }, type: 1 }], `🎮 Tebak Kata 🎮\n\nJawaban Benar 🎉\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak kata', buttonText: { displayText: 'Tebak Kata' }, type: 1 }], `?? Tebak Kata ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
                 delete tebakkata[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
         }
@@ -304,7 +304,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             jawaban = caklontong[m.sender.split('@')[0]]
 	    deskripsi = caklontong_desk[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lontong', buttonText: { displayText: 'Tebak Lontong' }, type: 1 }], `🎮 Cak Lontong 🎮\n\nJawaban Benar 🎉\n*${deskripsi}*\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lontong', buttonText: { displayText: 'Tebak Lontong' }, type: 1 }], `?? Cak Lontong ??\n\nJawaban Benar ??\n*${deskripsi}*\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
                 delete caklontong[m.sender.split('@')[0]]
 		delete caklontong_desk[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
@@ -314,7 +314,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             kuis = true
             jawaban = tebakkalimat[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak kalimat', buttonText: { displayText: 'Tebak Kalimat' }, type: 1 }], `🎮 Tebak Kalimat 🎮\n\nJawaban Benar 🎉\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak kalimat', buttonText: { displayText: 'Tebak Kalimat' }, type: 1 }], `?? Tebak Kalimat ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
                 delete tebakkalimat[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
         }
@@ -323,7 +323,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             kuis = true
             jawaban = tebaklirik[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lirik', buttonText: { displayText: 'Tebak Lirik' }, type: 1 }], `🎮 Tebak Lirik 🎮\n\nJawaban Benar 🎉\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lirik', buttonText: { displayText: 'Tebak Lirik' }, type: 1 }], `?? Tebak Lirik ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
                 delete tebaklirik[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
         }
@@ -332,7 +332,7 @@ ${Array.from(room.jawaban, (jawaban, index) => {
             kuis = true
             jawaban = tebaktebakan[m.sender.split('@')[0]]
             if (budy.toLowerCase() == jawaban) {
-                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak tebakan', buttonText: { displayText: 'Tebak Tebakan' }, type: 1 }], `🎮 Tebak Tebakan 🎮\n\nJawaban Benar 🎉\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak tebakan', buttonText: { displayText: 'Tebak Tebakan' }, type: 1 }], `?? Tebak Tebakan ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
                 delete tebaktebakan[m.sender.split('@')[0]]
             } else m.reply('*Jawaban Salah!*')
         }
@@ -364,17 +364,17 @@ ${Array.from(room.jawaban, (jawaban, index) => {
 	    else if (room.game.board === 511) isTie = true
 	    let arr = room.game.render().map(v => {
 	    return {
-	    X: '❌',
-	    O: '⭕',
-	    1: '1️⃣',
-	    2: '2️⃣',
-	    3: '3️⃣',
-	    4: '4️⃣',
-	    5: '5️⃣',
-	    6: '6️⃣',
-	    7: '7️⃣',
-	    8: '8️⃣',
-	    9: '9️⃣',
+	    X: '?',
+	    O: '?',
+	    1: '1??',
+	    2: '2??',
+	    3: '3??',
+	    4: '4??',
+	    5: '5??',
+	    6: '6??',
+	    7: '7??',
+	    8: '8??',
+	    9: '9??',
 	    }[v]
 	    })
 	    if (isSurrender) {
@@ -388,9 +388,9 @@ ${arr.slice(0, 3).join('')}
 ${arr.slice(3, 6).join('')}
 ${arr.slice(6).join('')}
 
-${isWin ? `@${winner.split('@')[0]} Menang!` : isTie ? `Game berakhir` : `Giliran ${['❌', '⭕'][1 * room.game._currentTurn]} (@${room.game.currentTurn.split('@')[0]})`}
-❌: @${room.game.playerX.split('@')[0]}
-⭕: @${room.game.playerO.split('@')[0]}
+${isWin ? `@${winner.split('@')[0]} Menang!` : isTie ? `Game berakhir` : `Giliran ${['?', '?'][1 * room.game._currentTurn]} (@${room.game.currentTurn.split('@')[0]})`}
+?: @${room.game.playerX.split('@')[0]}
+?: @${room.game.playerO.split('@')[0]}
 
 Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
 	    if ((room.game._currentTurn ^ isSurrender ? room.x : room.o) !== m.chat)
@@ -425,8 +425,8 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
 
 Silahkan pilih suit di chat masing"
 klik https://wa.me/${botNumber.split`@`[0]}`, m, { mentions: [roof.p, roof.p2] })
-	    if (!roof.pilih) zens.sendText(roof.p, `Silahkan pilih \n\nBatu🗿\nKertas📄\nGunting✂️`, m)
-	    if (!roof.pilih2) zens.sendText(roof.p2, `Silahkan pilih \n\nBatu🗿\nKertas📄\nGunting✂️`, m)
+	    if (!roof.pilih) zens.sendText(roof.p, `Silahkan pilih \n\nBatu??\nKertas??\nGunting??`, m)
+	    if (!roof.pilih2) zens.sendText(roof.p2, `Silahkan pilih \n\nBatu??\nKertas??\nGunting??`, m)
 	    roof.waktu_milih = setTimeout(() => {
 	    if (!roof.pilih && !roof.pilih2) zens.sendText(m.chat, `Kedua pemain tidak niat main,\nSuit dibatalkan`)
 	    else if (!roof.pilih || !roof.pilih2) {
@@ -520,17 +520,17 @@ Selama ${clockString(new Date - user.afkTime)}
             room.state = 'PLAYING'
             let arr = room.game.render().map(v => {
             return {
-            X: '❌',
-            O: '⭕',
-            1: '1️⃣',
-            2: '2️⃣',
-            3: '3️⃣',
-            4: '4️⃣',
-            5: '5️⃣',
-            6: '6️⃣',
-            7: '7️⃣',
-            8: '8️⃣',
-            9: '9️⃣',
+            X: '?',
+            O: '?',
+            1: '1??',
+            2: '2??',
+            3: '3??',
+            4: '4??',
+            5: '5??',
+            6: '6??',
+            7: '7??',
+            8: '8??',
+            9: '9??',
             }[v]
             })
             let str = `Room ID: ${room.id}
@@ -565,7 +565,7 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
             delete this.game
             zens.sendText(m.chat, `Berhasil delete session TicTacToe`, m)
             } else if (!this.game) {
-            m.reply(`Session TicTacToe🎮 tidak ada`)
+            m.reply(`Session TicTacToe?? tidak ada`)
             } else throw '?'
             } catch (e) {
             m.reply('rusak')
@@ -753,8 +753,8 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
 //Pembatas===============================================
             case 'slot': {
             const somtoy = sotoy[Math.floor(Math.random() * sotoy.length)]
-            let sloth =`[  🎰VIRTUAL SLOT 🎰  ]\n------------------------\n\n🍒 : 🍌 : 🍇\n${somtoy}<=====\n🍇 : 🍌 : 🍒\n\n------------------------\n[  🎰 VIRTUAL SLOT 🎰  ]\n\n*Keterangan* :\n_Jika Mendapatkan 3Buah Sama_\n_Berarti Kamu Win_\n\n_Contoh : 🍒 : 🍒 : 🍒_ <=====`
-            let buttons = [{ buttonId: 'slot', buttonText: { displayText: '🎰MAIN LAGI🎰' }, type: 1 }]
+            let sloth =`[  ??VIRTUAL SLOT ??  ]\n------------------------\n\n?? : ?? : ??\n${somtoy}<=====\n?? : ?? : ??\n\n------------------------\n[  ?? VIRTUAL SLOT ??  ]\n\n*Keterangan* :\n_Jika Mendapatkan 3Buah Sama_\n_Berarti Kamu Win_\n\n_Contoh : ?? : ?? : ??_ <=====`
+            let buttons = [{ buttonId: 'slot', buttonText: { displayText: '??MAIN LAGI??' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, sloth, nyoutube, m)
             }
             break
@@ -763,9 +763,9 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
             let member = participants.map(u => u.id)
             let me = m.sender
             let jodoh = member[Math.floor(Math.random() * member.length)]
-            let jawab = `👫Jodoh mu adalah
+            let jawab = `??Jodoh mu adalah
 
-@${me.split('@')[0]} ❤️ @${jodoh.split('@')[0]}`
+@${me.split('@')[0]} ?? @${jodoh.split('@')[0]}`
             let ments = [me, jodoh]
             let buttons = [
                         { buttonId: 'jodohku', buttonText: { displayText: 'Jodohku' }, type: 1 }
@@ -778,9 +778,9 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
             let member = participants.map(u => u.id)
             let orang = member[Math.floor(Math.random() * member.length)]
             let jodoh = member[Math.floor(Math.random() * member.length)]
-            let jawab = `Ciee yang Jadian💖 Jangan lupa Donasi🗿
+            let jawab = `Ciee yang Jadian?? Jangan lupa Donasi??
 
-@${orang.split('@')[0]} ❤️ @${jodoh.split('@')[0]}`
+@${orang.split('@')[0]} ?? @${jodoh.split('@')[0]}`
             let menst = [orang, jodoh]
             let buttons = [
                         { buttonId: 'jadian', buttonText: { displayText: 'Jadian' }, type: 1 }
@@ -801,7 +801,7 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
             	let bisa = ['Bisa','Coba Saja','Pasti Bisa','Mungkin Saja','Tidak Bisa','Tidak Mungkin','Coba Ulangi','Ngimpi kah?','yakin bisa?']
                 let keh = bisa[Math.floor(Math.random() * bisa.length)]
                 let jawab = `*Bisakah ${text}*\nJawab : ${keh}`
-                let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: 'SABAR🗿' }, type: 1 }]
+                let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: 'SABAR??' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m)
             }
             break
@@ -819,7 +819,7 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
             	let kapan = ['Besok','Lusa','Nanti','4 Hari Lagi','5 Hari Lagi','6 Hari Lagi','1 Minggu Lagi','2 Minggu Lagi','3 Minggu Lagi','1 Bulan Lagi','2 Bulan Lagi','3 Bulan Lagi','4 Bulan Lagi','5 Bulan Lagi','6 Bulan Lagi','1 Tahun Lagi','2 Tahun Lagi','3 Tahun Lagi','4 Tahun Lagi','5 Tahun Lagi','6 Tahun Lagi','1 Abad lagi','3 Hari Lagi','Bulan Depan','Nanti','Tidak Akan Pernah']
                 let koh = kapan[Math.floor(Math.random() * kapan.length)]
                 let jawab = `*${command} ${text}*\nJawab : ${koh}`
-                let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: 'SABAR🗿' }, type: 1 }]
+                let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: 'SABAR??' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m)
             }
             break
@@ -832,7 +832,7 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
             break
             case 'runtime': {
             	let lowq = `*Bot Telah Online Selama*\n*${runtime(process.uptime())}*`
-                let buttons = [{ buttonId: 'donasi', buttonText: { displayText: '👑SEWA' }, type: 1 }]
+                let buttons = [{ buttonId: 'donasi', buttonText: { displayText: '??SEWA' }, type: 1 }]
                 await zens.sendButtonText(m.chat, buttons, lowq, nyoutube, m, {quoted: fkontak})
             	}
             break
@@ -842,9 +842,9 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
                let me = m.sender
                let pjtxt = `Pesan Dari : @${me.split('@')[0]} \nUntuk : @${ownernya.split('@')[0]}\n\n${command} ${text}`
                let ments = [ownernya, me]
-               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '🙏THANKS' }, type: 1 }]
+               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '??THANKS' }, type: 1 }]
             await zens.sendButtonText(ownernya, buttons, pjtxt, nyoutube, m, {mentions: ments, quoted: fdoc})
-            let akhji = `*Request Telah Terkirim*\n*Ke Owner @${ownernya.split('@')[0]}*\n_Terima Kasih🙏_`
+            let akhji = `*Request Telah Terkirim*\n*Ke Owner @${ownernya.split('@')[0]}*\n_Terima Kasih??_`
             await zens.sendButtonText(m.chat, buttons, akhji, nyoutube, m, {mentions: ments, quoted: fkontak})
             }
             break
@@ -878,7 +878,7 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
                if (!text) throw `Example : ${prefix + command} packname|author`
           global.packname = text.split("|")[0]
           global.author = text.split("|")[1]
-          m.reply(`Exif berhasil diubah menjadi\n\n⌗ Packname : ${global.packname}\n⌗ Author : ${global.author}`)
+          m.reply(`Exif berhasil diubah menjadi\n\n? Packname : ${global.packname}\n? Author : ${global.author}`)
             }
             break
 	case 'kick': {
@@ -966,11 +966,11 @@ Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
                 if (!m.isGroup) throw mess.group
                 if (!isBotAdmins) throw mess.botAdmin
                 if (!isAdmins) throw mess.admin
-let teks = `══✪〘 *👥 Tag All* 〙✪══
+let teks = `--?? *?? Tag All* ??--
  
- ➲ *Pesan : ${q ? q : 'kosong'}*\n\n`
+ ? *Pesan : ${q ? q : 'kosong'}*\n\n`
                 for (let mem of participants) {
-                teks += `⌗ @${mem.id.split('@')[0]}\n`
+                teks += `? @${mem.id.split('@')[0]}\n`
                 }
                 zens.sendMessage(m.chat, { text: teks, mentions: participants.map(a => a.id) }, { quoted: m })
                 }
@@ -990,7 +990,7 @@ let teks = `══✪〘 *👥 Tag All* 〙✪══
                 let anu = await styletext(text)
                 let teks = `Srtle Text From ${text}\n\n`
                 for (let i of anu) {
-                    teks += `⌗ *${i.name}* : ${i.result}\n\n`
+                    teks += `? *${i.name}* : ${i.result}\n\n`
                 }
                 m.reply(teks)
 	    }
@@ -1004,28 +1004,28 @@ let teks = `══✪〘 *👥 Tag All* 〙✪══
             await sleep(1000)
             upvote = vote[m.chat][1]
             devote = vote[m.chat][2]
-            teks_vote = `*「 VOTE 」*
+            teks_vote = `*? VOTE ?*
 
 *Alasan:* ${vote[m.chat][0]}
 
-┌〔 UPVOTE 〕
-│ 
-├ Total: ${vote[m.chat][1].length}
-│
-│ 
-└────
++? UPVOTE ?
+¦ 
++ Total: ${vote[m.chat][1].length}
+¦
+¦ 
++----
 
-┌〔 DEVOTE 〕
-│ 
-├ Total: ${vote[m.chat][2].length}
-│
-│ 
-└────
++? DEVOTE ?
+¦ 
++ Total: ${vote[m.chat][2].length}
+¦
+¦ 
++----
 
 *${prefix}hapusvote* - untuk menghapus vote`
 let buttonsVote = [
-  {buttonId: `${prefix}upvote`, buttonText: {displayText: '𝚄𝙿𝚅𝙾𝚃𝙴'}, type: 1},
-  {buttonId: `${prefix}devote`, buttonText: {displayText: '𝙳𝙴𝚅𝙾𝚃𝙴'}, type: 1}
+  {buttonId: `${prefix}upvote`, buttonText: {displayText: '????????????'}, type: 1},
+  {buttonId: `${prefix}devote`, buttonText: {displayText: '????????????'}, type: 1}
 ]
 
             let buttonMessageVote = {
@@ -1045,28 +1045,28 @@ let buttonsVote = [
             if (wasVote) throw 'Kamu Sudah Vote'
             vote[m.chat][1].push(m.sender)
             menvote = vote[m.chat][1].concat(vote[m.chat][2])
-            teks_vote = `*「 VOTE 」*
+            teks_vote = `*? VOTE ?*
 
 *Alasan:* ${vote[m.chat][0]}
 
-┌〔 UPVOTE 〕
-│ 
-├ Total: ${vote[m.chat][1].length}
-${vote[m.chat][1].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
-│ 
-└────
++? UPVOTE ?
+¦ 
++ Total: ${vote[m.chat][1].length}
+${vote[m.chat][1].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
-┌〔 DEVOTE 〕
-│ 
-├ Total: ${vote[m.chat][2].length}
-${vote[m.chat][2].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
-│ 
-└────
++? DEVOTE ?
+¦ 
++ Total: ${vote[m.chat][2].length}
+${vote[m.chat][2].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
 *${prefix}hapusvote* - untuk menghapus vote`
             let buttonsUpvote = [
-              {buttonId: `${prefix}upvote`, buttonText: {displayText: '𝚄𝙿??𝙾𝚃𝙴'}, type: 1},
-              {buttonId: `${prefix}devote`, buttonText: {displayText: '𝙳𝙴𝚅𝙾𝚃𝙴'}, type: 1}
+              {buttonId: `${prefix}upvote`, buttonText: {displayText: '????????????'}, type: 1},
+              {buttonId: `${prefix}devote`, buttonText: {displayText: '????????????'}, type: 1}
             ]
 
             let buttonMessageUpvote = {
@@ -1087,28 +1087,28 @@ ${vote[m.chat][2].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
             if (wasVote) throw 'Kamu Sudah Vote'
             vote[m.chat][2].push(m.sender)
             menvote = vote[m.chat][1].concat(vote[m.chat][2])
-            teks_vote = `*「 VOTE 」*
+            teks_vote = `*? VOTE ?*
 
 *Alasan:* ${vote[m.chat][0]}
 
-┌〔 UPVOTE 〕
-│ 
-├ Total: ${vote[m.chat][1].length}
-${vote[m.chat][1].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
-│ 
-└────
++? UPVOTE ?
+¦ 
++ Total: ${vote[m.chat][1].length}
+${vote[m.chat][1].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
-┌〔 DEVOTE 〕
-│ 
-├ Total: ${vote[m.chat][2].length}
-${vote[m.chat][2].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
-│ 
-└────
++? DEVOTE ?
+¦ 
++ Total: ${vote[m.chat][2].length}
+${vote[m.chat][2].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
 *${prefix}hapusvote* - untuk menghapus vote`
             let buttonsDevote = [
-              {buttonId: `${prefix}upvote`, buttonText: {displayText: '𝚄𝙿𝚅𝙾𝚃𝙴'}, type: 1},
-              {buttonId: `${prefix}devote`, buttonText: {displayText: '𝙳𝙴𝚅𝙾𝚃𝙴'}, type: 1}
+              {buttonId: `${prefix}upvote`, buttonText: {displayText: '????????????'}, type: 1},
+              {buttonId: `${prefix}devote`, buttonText: {displayText: '????????????'}, type: 1}
             ]
 
             let buttonMessageDevote = {
@@ -1125,23 +1125,23 @@ ${vote[m.chat][2].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
 case 'cekvote':
 if (!m.isGroup) throw mess.group
 if (!(m.chat in vote)) throw `_*tidak ada voting digrup ini!*_\n\n*${prefix}vote* - untuk memulai vote`
-teks_vote = `*「 VOTE 」*
+teks_vote = `*? VOTE ?*
 
 *Alasan:* ${vote[m.chat][0]}
 
-┌〔 UPVOTE 〕
-│ 
-├ Total: ${upvote.length}
-${vote[m.chat][1].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
-│ 
-└────
++? UPVOTE ?
+¦ 
++ Total: ${upvote.length}
+${vote[m.chat][1].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
-┌〔 DEVOTE 〕
-│ 
-├ Total: ${devote.length}
-${vote[m.chat][2].map((v, i) => `├ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
-│ 
-└────
++? DEVOTE ?
+¦ 
++ Total: ${devote.length}
+${vote[m.chat][2].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
 *${prefix}hapusvote* - untuk menghapus vote
 
@@ -1239,7 +1239,7 @@ break
                 if (!m.isGroup) throw mess.group
                 if (!isBotAdmins) throw mess.botAdmin
                 let response = await zens.groupInviteCode(m.chat)
-                zens.sendText(m.chat, `https://chat.whatsapp.com/${response}\n\n👾Link Group : ${groupMetadata.subject}`, m, { detectLink: true })
+                zens.sendText(m.chat, `https://chat.whatsapp.com/${response}\n\n??Link Group : ${groupMetadata.subject}`, m, { detectLink: true })
             }
             break
             case 'ephemeral': {
@@ -1267,16 +1267,16 @@ break
                let me = m.sender
                let pjtxt = `Pesan Dari : @${me.split('@')[0]} \nUntuk : @${ownernya.split('@')[0]}\n\n${text}`
                let ments = [ownernya, me]
-               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '🙏THANKS LAPORANNYA' }, type: 1 }]
+               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '??THANKS LAPORANNYA' }, type: 1 }]
             await zens.sendButtonText(ownernya, buttons, pjtxt, nyoutube, m, {mentions: ments})
-            let akhji = `Laporan Telah Terkirim\nKe Owner @${ownernya.split('@')[0]}\n*Terima Kasih Laporannya🙏*\n_Nomermu Akan Terblokir_\n_Jika Laporan Hanya Di Buat Buat_`
+            let akhji = `Laporan Telah Terkirim\nKe Owner @${ownernya.split('@')[0]}\n*Terima Kasih Laporannya??*\n_Nomermu Akan Terblokir_\n_Jika Laporan Hanya Di Buat Buat_`
             await zens.sendButtonText(m.chat, buttons, akhji, nyoutube, m, {mentions: ments})
             }
             break
             case 'hehehe': {
                 reactionMessage = {
                     react: {
-                        text: '❤',
+                        text: '?',
                         key: { remoteJid: m.chat, fromMe: true, id: quoted.id }
                     }
                 }
@@ -1293,8 +1293,8 @@ break
                 m.reply(`Mengirim Broadcast Ke ${anu.length} Group Chat, Waktu Selesai ${anu.length * 1.5} detik`)
                 for (let i of anu) {
                     await sleep(1500)
-                    let txt = `「 *Broadcast Group* 」\n\n${text}`
-                    let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+                    let txt = `? *Broadcast Group* ?\n\n${text}`
+                    let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, txt, nyoutube, m)
 		}}
             break
@@ -1305,8 +1305,8 @@ break
                 m.reply(`Mengirim Broadcast Ke ${anu.length} Chat\nWaktu Selesai ${anu.length * 1.5} detik`)
 		for (let yoi of anu) {
 		    await sleep(3000)
-                      let txt = `「 *Broadcast zens cuy* 」\n\n${text}`
-                      let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+                      let txt = `? *Broadcast zens cuy* ?\n\n${text}`
+                      let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, txt, nyoutube, m)
 		}}
             break
@@ -1319,20 +1319,20 @@ break
 	    break
             case 'listpc': {
                  let anu = await store.chats.all().filter(v => v.id.endsWith('.net')).map(v => v.id)
-                 let teks = `⬣ *LIST PERSONAL CHAT*\n\nTotal Chat : ${anu.length} Chat\n\n`
+                 let teks = `? *LIST PERSONAL CHAT*\n\nTotal Chat : ${anu.length} Chat\n\n`
                  for (let i of anu) {
                      let nama = store.messages[i].array[0].pushName
-                     teks += `⬡ *Nama :* ${nama}\n⬡ *User :* @${i.split('@')[0]}\n⬡ *Chat :* https://wa.me/${i.split('@')[0]}\n\n────────────────────────\n\n`
+                     teks += `? *Nama :* ${nama}\n? *User :* @${i.split('@')[0]}\n? *Chat :* https://wa.me/${i.split('@')[0]}\n\n------------------------\n\n`
                  }
                  zens.sendTextWithMentions(m.chat, teks, m)
              }
              break
                 case 'listgc': {
                  let anu = await store.chats.all().filter(v => v.id.endsWith('@g.us')).map(v => v.id)
-                 let teks = `⬣ *LIST GROUP CHAT*\n\nTotal Group : ${anu.length} Group\n\n`
+                 let teks = `? *LIST GROUP CHAT*\n\nTotal Group : ${anu.length} Group\n\n`
                  for (let i of anu) {
                      let metadata = await zens.groupMetadata(i)
-                     teks += `⬡ *Nama :* ${metadata.subject}\n⬡ *Owner :* ${metadata.owner !== undefined ? '@' + metadata.owner.split`@`[0] : 'Tidak diketahui'}\n⬡ *ID :* ${metadata.id}\n⬡ *Dibuat :* ${moment(metadata.creation * 1000).tz('Asia/Jakarta').format('DD/MM/YYYY HH:mm:ss')}\n⬡ *Member :* ${metadata.participants.length}\n\n────────────────────────\n\n`
+                     teks += `? *Nama :* ${metadata.subject}\n? *Owner :* ${metadata.owner !== undefined ? '@' + metadata.owner.split`@`[0] : 'Tidak diketahui'}\n? *ID :* ${metadata.id}\n? *Dibuat :* ${moment(metadata.creation * 1000).tz('Asia/Jakarta').format('DD/MM/YYYY HH:mm:ss')}\n? *Member :* ${metadata.participants.length}\n\n------------------------\n\n`
                  }
                  zens.sendTextWithMentions(m.chat, teks, m)
              }
@@ -1340,7 +1340,7 @@ break
              case 'listonline': case 'liston': {
                     let id = args && /\d+\-\d+@g.us/.test(args[0]) ? args[0] : m.chat
                     let online = [...Object.keys(store.presences[id]), botNumber]
-                    zens.sendText(m.chat, 'List Online:\n\n' + online.map(v => '⌗ @' + v.replace(/@.+/, '')).join`\n`, m, { mentions: online })
+                    zens.sendText(m.chat, 'List Online:\n\n' + online.map(v => '? @' + v.replace(/@.+/, '')).join`\n`, m, { mentions: online })
              }
              break
             case 'ebinary': {
@@ -1454,9 +1454,9 @@ Lihat list Pesan Dengan ${prefix}listmsg`)
             case 'listmsg': {
                 let msgs = JSON.parse(fs.readFileSync('./src/database.json'))
 	        let seplit = Object.entries(global.db.data.database).map(([nama, isi]) => { return { nama, ...isi } })
-		let teks = '「 LIST DATABASE 」\n\n'
+		let teks = '? LIST DATABASE ?\n\n'
 		for (let i of seplit) {
-		    teks += `⬡ *Name :* ${i.nama}\n⬡ *Type :* ${getContentType(i.message).replace(/Message/i, '')}\n────────────────────────\n\n`
+		    teks += `? *Name :* ${i.nama}\n? *Type :* ${getContentType(i.message).replace(/Message/i, '')}\n------------------------\n\n`
 	        }
 	        m.reply(teks)
 	    }
@@ -1625,7 +1625,7 @@ Lihat list Pesan Dengan ${prefix}listmsg`)
                 respon = `
 Kecepatan Respon ${latensi.toFixed(4)} _Second_ \n ${oldd - neww} _miliseconds_\n\nRuntime : ${runtime(process.uptime())}
 
-💻 Info Server
+?? Info Server
 RAM: ${formatp(os.totalmem() - os.freemem())} / ${formatp(os.totalmem())}
 
 _NodeJS Memory Usaage_
@@ -1724,8 +1724,8 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
             break
          case 'emojimix': {
 		let [emoji1, emoji2] = text.split`+`
-		if (!emoji1) throw `Example : ${prefix + command} 😅+🤔`
-		if (!emoji2) throw `Example : ${prefix + command} 😅+🤔`
+		if (!emoji1) throw `Example : ${prefix + command} ??+??`
+		if (!emoji2) throw `Example : ${prefix + command} ??+??`
 		let anu = await fetchJson(`https://tenor.googleapis.com/v2/featured?key=AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v5&q=${encodeURIComponent(emoji1)}_${encodeURIComponent(emoji2)}`)
 		for (let res of anu.results) {
 		    let encmedia = await zens.sendImageAsSticker(m.chat, res.url, m, { packname: global.packname, author: global.author, categories: res.tags })
@@ -1734,7 +1734,7 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
 	    }
 	    break
 	    case 'emojimix2': {
-	    if (!text) throw `Example : ${prefix + command} 😅`
+	    if (!text) throw `Example : ${prefix + command} ??`
 		let anu = await fetchJson(`https://tenor.googleapis.com/v2/featured?key=AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v5&q=${encodeURIComponent(text)}`)
 		for (let res of anu.results) {
 		    let encmedia = await zens.sendImageAsSticker(m.chat, res.url, m, { packname: global.packname, author: global.author, categories: res.tags })
@@ -1896,7 +1896,7 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
                let me = m.sender
                let ments = [mq1, ownernya, me]
                let pjtxt = `Pesan Dari : ${m2} \nUntuk : @${mq1.split('@')[0]}\n\n${m3}`
-               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '❤THANKS' }, type: 1 }]
+               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '?THANKS' }, type: 1 }]
             await zens.sendButtonText(m1 + '@s.whatsapp.net', buttons, pjtxt, kawk, m, {mentions: ments, quoted: kafloc})
             let akhji = `Pesan Telah Terkirim\nKe @${mq1.split('@')[0]}`
             await zens.sendButtonText(m.chat, buttons, akhji, nyoutube, m, {mentions: ments})
@@ -1909,7 +1909,7 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
                 let teks = 'YouTube Search\n\n Result From '+text+'\n\n'
                 let no = 1
                 for (let i of search.all) {
-                    teks += `⌗ No : ${no++}\n⌗ Type : ${i.type}\n⌗ Video ID : ${i.videoId}\n⌗ Title : ${i.title}\n⌗ Views : ${i.views}\n⌗ Duration : ${i.timestamp}\n⌗ Upload At : ${i.ago}\n⌗ Author : ${i.author.name}\n⌗ Url : ${i.url}\n\n─────────────────\n\n`
+                    teks += `? No : ${no++}\n? Type : ${i.type}\n? Video ID : ${i.videoId}\n? Title : ${i.title}\n? Views : ${i.views}\n? Duration : ${i.timestamp}\n? Upload At : ${i.ago}\n? Author : ${i.author.name}\n? Url : ${i.url}\n\n-----------------\n\n`
                 }
                 zens.sendMessage(m.chat, { image: { url: search.all[0].thumbnail },  caption: teks }, { quoted: m })
             }
@@ -1920,9 +1920,9 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
                 google({'query': text}).then(res => {
                 let teks = `Google Search From : ${text}\n\n`
                 for (let g of res) {
-                teks += `⌗ *Title* : ${g.title}\n`
-                teks += `⌗ *Description* : ${g.snippet}\n`
-                teks += `⌗ *Link* : ${g.link}\n\n────────────────────────\n\n`
+                teks += `? *Title* : ${g.title}\n`
+                teks += `? *Description* : ${g.snippet}\n`
+                teks += `? *Link* : ${g.link}\n\n------------------------\n\n`
                 } 
                 m.reply(teks)
                 })
@@ -1938,9 +1938,9 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
                 ]
                 let buttonMessage = {
                     image: { url: images },
-                    caption: `*-------「 GIMAGE SEARCH 」-------*
-🤠 *Query* : ${text}
-🔗 *Media Url* : ${images}`,
+                    caption: `*-------? GIMAGE SEARCH ?-------*
+?? *Query* : ${text}
+?? *Media Url* : ${images}`,
                     footer: zens.user.name,
                     buttons: buttons,
                     headerType: 4
@@ -1954,22 +1954,22 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
                 let search = await yts(text)
                 let anu = search.videos[Math.floor(Math.random() * search.videos.length)]
                 let buttons = [
-                    {buttonId: `ytmp3 ${anu.url}`, buttonText: {displayText: '♫ Audio'}, type: 1},
-                    {buttonId: `ytmp4 ${anu.url}`, buttonText: {displayText: '► Video'}, type: 1}
+                    {buttonId: `ytmp3 ${anu.url}`, buttonText: {displayText: '? Audio'}, type: 1},
+                    {buttonId: `ytmp4 ${anu.url}`, buttonText: {displayText: '? Video'}, type: 1}
                 ]
                 let buttonMessage = {
                     image: { url: anu.thumbnail },
                     caption: `
-⌗ Title : ${anu.title}
-⌗ Ext : Search
-⌗ ID : ${anu.videoId}
-⌗ Duration : ${anu.timestamp}
-⌗ Viewers : ${anu.views}
-⌗ Upload At : ${anu.ago}
-⌗ Author : ${anu.author.name}
-⌗ Channel : ${anu.author.url}
-⌗ Description : ${anu.description}
-⌗ Url : ${anu.url}`,
+? Title : ${anu.title}
+? Ext : Search
+? ID : ${anu.videoId}
+? Duration : ${anu.timestamp}
+? Viewers : ${anu.views}
+? Upload At : ${anu.ago}
+? Author : ${anu.author.name}
+? Channel : ${anu.author.url}
+? Description : ${anu.description}
+? Url : ${anu.url}`,
                     footer: zens.user.name,
                     buttons: buttons,
                     headerType: 4
@@ -1983,7 +1983,7 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
                 let quality = args[1] ? args[1] : '128kbps'
                 let media = await yta(text, quality)
                 if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
-                zens.sendImage(m.chat, media.thumb, `⌗ Title : ${media.title}\n⌗ File Size : ${media.filesizeF}\n⌗ Url : ${isUrl(text)}\n⌗ Ext : MP3\n⌗ Resolusi : ${args[1] || '128kbps'}`, m)
+                zens.sendImage(m.chat, media.thumb, `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${isUrl(text)}\n? Ext : MP3\n? Resolusi : ${args[1] || '128kbps'}`, m)
                 zens.sendMessage(m.chat, { audio: { url: media.dl_link }, mimetype: 'audio/mpeg', fileName: `${media.title}.mp3` }, { quoted: m })
             }
             break
@@ -1993,7 +1993,7 @@ ${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Obje
                 let quality = args[1] ? args[1] : '360p'
                 let media = await ytv(text, quality)
                 if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
-                zens.sendMessage(m.chat, { video: { url: media.dl_link }, mimetype: 'video/mp4', fileName: `${media.title}.mp4`, caption: `⌗ Title : ${media.title}\n⌗ File Size : ${media.filesizeF}\n⌗ Url : ${isUrl(text)}\n⌗ Ext : MP3\n⌗ Resolusi : ${args[1] || '360p'}` }, { quoted: m })
+                zens.sendMessage(m.chat, { video: { url: media.dl_link }, mimetype: 'video/mp4', fileName: `${media.title}.mp4`, caption: `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${isUrl(text)}\n? Ext : MP3\n? Resolusi : ${args[1] || '360p'}` }, { quoted: m })
             }
             break
 case 'autosw': {
@@ -2017,7 +2017,7 @@ break;
                 let quality = args[1] ? args[1] : '128kbps'
                 let media = await yta(urls[text - 1], quality)
                 if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
-                zens.sendImage(m.chat, media.thumb, `⌗ Title : ${media.title}\n⌗ File Size : ${media.filesizeF}\n⌗ Url : ${urls[text - 1]}\n⌗ Ext : MP3\n⌗ Resolusi : ${args[1] || '128kbps'}`, m)
+                zens.sendImage(m.chat, media.thumb, `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${urls[text - 1]}\n? Ext : MP3\n? Resolusi : ${args[1] || '128kbps'}`, m)
                 zens.sendMessage(m.chat, { audio: { url: media.dl_link }, mimetype: 'audio/mpeg', fileName: `${media.title}.mp3` }, { quoted: m })
             }
             break
@@ -2031,7 +2031,7 @@ break;
                 let quality = args[1] ? args[1] : '360p'
                 let media = await ytv(urls[text - 1], quality)
                 if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
-                zens.sendMessage(m.chat, { video: { url: media.dl_link }, mimetype: 'video/mp4', fileName: `${media.title}.mp4`, caption: `⌗ Title : ${media.title}\n⌗ File Size : ${media.filesizeF}\n⌗ Url : ${urls[text - 1]}\n⌗ Ext : MP3\n⌗ Resolusi : ${args[1] || '360p'}` }, { quoted: m })
+                zens.sendMessage(m.chat, { video: { url: media.dl_link }, mimetype: 'video/mp4', fileName: `${media.title}.mp4`, caption: `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${urls[text - 1]}\n? Ext : MP3\n? Resolusi : ${args[1] || '360p'}` }, { quoted: m })
             }
             break
             case 'pinterest': {
@@ -2039,7 +2039,7 @@ break;
 		let { pinterest } = require('./lib/scraper')
                 anu = await pinterest(text)
                 result = anu[Math.floor(Math.random() * anu.length)]
-                zens.sendMessage(m.chat, { image: { url: result }, caption: '⌗ Media Url : '+result }, { quoted: m })
+                zens.sendMessage(m.chat, { image: { url: result }, caption: '? Media Url : '+result }, { quoted: m })
             }
             break
 case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'megumin': case 'waifus': case 'nekos': case 'trap': case 'blowjob': {
@@ -2051,7 +2051,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
             	m.reply(mess.wait)
                 anu = await fetchJson(`https://waifu.pics/api/sfw/waifu`)
                 buffer = await getBuffer(anu.url)
-                let buttons = [{buttonId: `waifu`, buttonText: {displayText: 'Next Image'}, type: 1},{buttonId: `simplemenu`, buttonText: {displayText: '⬅️Back'}, type: 1}]
+                let buttons = [{buttonId: `waifu`, buttonText: {displayText: 'Next Image'}, type: 1},{buttonId: `simplemenu`, buttonText: {displayText: '??Back'}, type: 1}]
                 let buttonMessage = {
                     image: buffer,
                     caption: `Random Waifu`,
@@ -2076,7 +2076,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 ]
                 let buttonMessage = {
                     image: { url: 'https://coffee.alexflipnote.dev/random' },
-                    caption: `☕ Random Coffe`,
+                    caption: `? Random Coffe`,
                     footer: nyoutube,
                     buttons: buttons,
                     headerType: 4
@@ -2094,7 +2094,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 ]
                 let buttonMessage = {
                     image: { url: result.image[0] },
-                    caption: `⌗ Title : ${result.title}\n⌗ Category : ${result.type}\n⌗ Detail : ${result.source}\n⌗ Media Url : ${result.image[2] || result.image[1] || result.image[0]}`,
+                    caption: `? Title : ${result.title}\n? Category : ${result.type}\n? Detail : ${result.source}\n? Media Url : ${result.image[2] || result.image[1] || result.image[0]}`,
                     footer: nyoutube,
                     buttons: buttons,
                     headerType: 4
@@ -2108,7 +2108,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 n = anu.result
                 result = n[Math.floor(Math.random() * n.length)]
                 let jwbn = `*Nama : ${result.nama}\n*Link : ${result.link}*`
-		let buttons = [{ buttonId: `gcsearch ${text}`, buttonText: { displayText: 'Next' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+		let buttons = [{ buttonId: `gcsearch ${text}`, buttonText: { displayText: 'Next' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, jwbn, nyoutube, m, {quoted: fgclink})
             }
             break
@@ -2122,7 +2122,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 ]
                 let buttonMessage = {
                     image: { url: result.image },
-                    caption: `⌗ Title : ${result.title}\n⌗ Source : ${result.source}\n⌗ Media Url : ${result.image}`,
+                    caption: `? Title : ${result.title}\n? Source : ${result.source}\n? Media Url : ${result.image}`,
                     footer: nyoutube,
                     buttons: buttons,
                     headerType: 4
@@ -2134,7 +2134,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
             	if (!text) throw 'Masukkan Query Title'
                 let anu = await fetchJson(`https://api.akuari.my.id/short/${command}?link=${text}`)
                 let buttons = [
-                    {buttonId: `hehehe`, buttonText: {displayText: '🙏THANKS'}, type: 1}
+                    {buttonId: `hehehe`, buttonText: {displayText: '??THANKS'}, type: 1}
                 ]
                 let buttonMessage = {
                     text: anu.hasil,
@@ -2187,14 +2187,14 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 if (!Number(text)) throw `Example : ${prefix + command} 6285692287644`
                 let anu = await primbon.nomer_hoki(Number(text))
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nomor HP :* ${anu.message.nomer_hp}\n⌗ *Angka Shuzi :* ${anu.message.angka_shuzi}\n⌗ *Energi Positif :*\n- Kekayaan : ${anu.message.energi_positif.kekayaan}\n- Kesehatan : ${anu.message.energi_positif.kesehatan}\n- Cinta : ${anu.message.energi_positif.cinta}\n- Kestabilan : ${anu.message.energi_positif.kestabilan}\n- Persentase : ${anu.message.energi_positif.persentase}\n⌗ *Energi Negatif :*\n- Perselisihan : ${anu.message.energi_negatif.perselisihan}\n- Kehilangan : ${anu.message.energi_negatif.kehilangan}\n- Malapetaka : ${anu.message.energi_negatif.malapetaka}\n- Kehancuran : ${anu.message.energi_negatif.kehancuran}\n- Persentase : ${anu.message.energi_negatif.persentase}`, m)
+                zens.sendText(m.chat, `? *Nomor HP :* ${anu.message.nomer_hp}\n? *Angka Shuzi :* ${anu.message.angka_shuzi}\n? *Energi Positif :*\n- Kekayaan : ${anu.message.energi_positif.kekayaan}\n- Kesehatan : ${anu.message.energi_positif.kesehatan}\n- Cinta : ${anu.message.energi_positif.cinta}\n- Kestabilan : ${anu.message.energi_positif.kestabilan}\n- Persentase : ${anu.message.energi_positif.persentase}\n? *Energi Negatif :*\n- Perselisihan : ${anu.message.energi_negatif.perselisihan}\n- Kehilangan : ${anu.message.energi_negatif.kehilangan}\n- Malapetaka : ${anu.message.energi_negatif.malapetaka}\n- Kehancuran : ${anu.message.energi_negatif.kehancuran}\n- Persentase : ${anu.message.energi_negatif.persentase}`, m)
             }
             break
             case 'artimimpi': case 'tafsirmimpi': {
                 if (!text) throw `Example : ${prefix + command} belanja`
                 let anu = await primbon.tafsir_mimpi(text)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Mimpi :* ${anu.message.mimpi}\n⌗ *Arti :* ${anu.message.arti}\n⌗ *Solusi :* ${anu.message.solusi}`, m)
+                zens.sendText(m.chat, `? *Mimpi :* ${anu.message.mimpi}\n? *Arti :* ${anu.message.arti}\n? *Solusi :* ${anu.message.solusi}`, m)
             }
             break
             case 'ramalanjodoh': case 'ramaljodoh': {
@@ -2202,7 +2202,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
                 let anu = await primbon.ramalan_jodoh(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama Anda :* ${anu.message.nama_anda.nama}\n⌗ *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n⌗ *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n⌗ *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n⌗ *Hasil :* ${anu.message.result}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Nama Anda :* ${anu.message.nama_anda.nama}\n? *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n? *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n? *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'ramalanjodohbali': case 'ramaljodohbali': {
@@ -2210,7 +2210,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
                 let anu = await primbon.ramalan_jodoh_bali(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama Anda :* ${anu.message.nama_anda.nama}\n⌗ *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n⌗ *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n⌗ *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n⌗ *Hasil :* ${anu.message.result}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Nama Anda :* ${anu.message.nama_anda.nama}\n? *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n? *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n? *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'suamiistri': {
@@ -2218,7 +2218,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
                 let anu = await primbon.suami_istri(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama Suami :* ${anu.message.suami.nama}\n⌗ *Lahir Suami :* ${anu.message.suami.tgl_lahir}\n⌗ *Nama Istri :* ${anu.message.istri.nama}\n⌗ *Lahir Istri :* ${anu.message.istri.tgl_lahir}\n⌗ *Hasil :* ${anu.message.result}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Nama Suami :* ${anu.message.suami.nama}\n? *Lahir Suami :* ${anu.message.suami.tgl_lahir}\n? *Nama Istri :* ${anu.message.istri.nama}\n? *Lahir Istri :* ${anu.message.istri.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'ramalancinta': case 'ramalcinta': {
@@ -2226,14 +2226,14 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
                 let anu = await primbon.ramalan_cinta(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama Anda :* ${anu.message.nama_anda.nama}\n⌗ *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n⌗ *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n⌗ *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n⌗ *Sisi Positif :* ${anu.message.sisi_positif}\n⌗ *Sisi Negatif :* ${anu.message.sisi_negatif}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Nama Anda :* ${anu.message.nama_anda.nama}\n? *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n? *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n? *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n? *Sisi Positif :* ${anu.message.sisi_positif}\n? *Sisi Negatif :* ${anu.message.sisi_negatif}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'artinama': {
                 if (!text) throw `Example : ${prefix + command} Dika Ardianta`
                 let anu = await primbon.arti_nama(text)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama :* ${anu.message.nama}\n⌗ *Arti :* ${anu.message.arti}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Arti :* ${anu.message.arti}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'kecocokannama': case 'cocoknama': {
@@ -2241,7 +2241,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama, tgl, bln, thn] = text.split`,`
                 let anu = await primbon.kecocokan_nama(nama, tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama :* ${anu.message.nama}\n⌗ *Lahir :* ${anu.message.tgl_lahir}\n⌗ *Life Path :* ${anu.message.life_path}\n⌗ *Destiny :* ${anu.message.destiny}\n⌗ *Destiny Desire :* ${anu.message.destiny_desire}\n⌗ *Personality :* ${anu.message.personality}\n⌗ *Persentase :* ${anu.message.persentase_kecocokan}`, m)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Life Path :* ${anu.message.life_path}\n? *Destiny :* ${anu.message.destiny}\n? *Destiny Desire :* ${anu.message.destiny_desire}\n? *Personality :* ${anu.message.personality}\n? *Persentase :* ${anu.message.persentase_kecocokan}`, m)
             }
             break
             case 'kecocokanpasangan': case 'cocokpasangan': case 'pasangan': {
@@ -2249,7 +2249,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama1, nama2] = text.split`|`
                 let anu = await primbon.kecocokan_nama_pasangan(nama1, nama2)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendImage(m.chat,  anu.message.gambar, `⌗ *Nama Anda :* ${anu.message.nama_anda}\n⌗ *Nama Pasangan :* ${anu.message.nama_pasangan}\n⌗ *Sisi Positif :* ${anu.message.sisi_positif}\n⌗ *Sisi Negatif :* ${anu.message.sisi_negatif}`, m)
+                zens.sendImage(m.chat,  anu.message.gambar, `? *Nama Anda :* ${anu.message.nama_anda}\n? *Nama Pasangan :* ${anu.message.nama_pasangan}\n? *Sisi Positif :* ${anu.message.sisi_positif}\n? *Sisi Negatif :* ${anu.message.sisi_negatif}`, m)
             }
             break
             case 'jadianpernikahan': case 'jadiannikah': {
@@ -2257,7 +2257,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.tanggal_jadian_pernikahan(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Tanggal Pernikahan :* ${anu.message.tanggal}\n⌗ *karakteristik :* ${anu.message.karakteristik}`, m)
+                zens.sendText(m.chat, `? *Tanggal Pernikahan :* ${anu.message.tanggal}\n? *karakteristik :* ${anu.message.karakteristik}`, m)
             }
             break
             case 'sifatusaha': {
@@ -2265,7 +2265,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.sifat_usaha_bisnis(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Lahir :* ${anu.message.hari_lahir}\n⌗ *Usaha :* ${anu.message.usaha}`, m)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.hari_lahir}\n? *Usaha :* ${anu.message.usaha}`, m)
             }
             break
             case 'rejeki': case 'rezeki': {
@@ -2273,7 +2273,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.rejeki_hoki_weton(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Lahir :* ${anu.message.hari_lahir}\n⌗ *Rezeki :* ${anu.message.rejeki}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.hari_lahir}\n? *Rezeki :* ${anu.message.rejeki}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'pekerjaan': case 'kerja': {
@@ -2281,15 +2281,15 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.pekerjaan_weton_lahir(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Lahir :* ${anu.message.hari_lahir}\n⌗ *Pekerjaan :* ${anu.message.pekerjaan}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.hari_lahir}\n? *Pekerjaan :* ${anu.message.pekerjaan}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'ramalannasib': case 'ramalnasib': case 'nasib': {
-                if (!text) throw `Example❗:\n${prefix + command} 7,7,2005`
+                if (!text) throw `Example?:\n${prefix + command} 7,7,2005`
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.ramalan_nasib(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Analisa :* ${anu.message.analisa}\n⌗ *Angka Akar :* ${anu.message.angka_akar}\n⌗ *Sifat :* ${anu.message.sifat}\n⌗ *Elemen :* ${anu.message.elemen}\n⌗ *Angka Keberuntungan :* ${anu.message.angka_keberuntungan}`, m)
+                zens.sendText(m.chat, `? *Analisa :* ${anu.message.analisa}\n? *Angka Akar :* ${anu.message.angka_akar}\n? *Sifat :* ${anu.message.sifat}\n? *Elemen :* ${anu.message.elemen}\n? *Angka Keberuntungan :* ${anu.message.angka_keberuntungan}`, m)
             }
             break
             case 'potensipenyakit': case 'penyakit': {
@@ -2297,7 +2297,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.cek_potensi_penyakit(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Analisa :* ${anu.message.analisa}\n⌗ *Sektor :* ${anu.message.sektor}\n⌗ *Elemen :* ${anu.message.elemen}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Analisa :* ${anu.message.analisa}\n? *Sektor :* ${anu.message.sektor}\n? *Elemen :* ${anu.message.elemen}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'artitarot': case 'tarot': {
@@ -2305,7 +2305,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.arti_kartu_tarot(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendImage(m.chat, anu.message.image, `⌗ *Lahir :* ${anu.message.tgl_lahir}\n⌗ *Simbol Tarot :* ${anu.message.simbol_tarot}\n⌗ *Arti :* ${anu.message.arti}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendImage(m.chat, anu.message.image, `? *Lahir :* ${anu.message.tgl_lahir}\n? *Simbol Tarot :* ${anu.message.simbol_tarot}\n? *Arti :* ${anu.message.arti}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'fengshui': {
@@ -2313,7 +2313,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama, gender, tahun] = text.split`,`
                 let anu = await primbon.perhitungan_feng_shui(nama, gender, tahun)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama :* ${anu.message.nama}\n⌗ *Lahir :* ${anu.message.tahun_lahir}\n⌗ *Gender :* ${anu.message.jenis_kelamin}\n⌗ *Angka Kua :* ${anu.message.angka_kua}\n⌗ *Kelompok :* ${anu.message.kelompok}\n⌗ *Karakter :* ${anu.message.karakter}\n⌗ *Sektor Baik :* ${anu.message.sektor_baik}\n⌗ *Sektor Buruk :* ${anu.message.sektor_buruk}`, m)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tahun_lahir}\n? *Gender :* ${anu.message.jenis_kelamin}\n? *Angka Kua :* ${anu.message.angka_kua}\n? *Kelompok :* ${anu.message.kelompok}\n? *Karakter :* ${anu.message.karakter}\n? *Sektor Baik :* ${anu.message.sektor_baik}\n? *Sektor Buruk :* ${anu.message.sektor_buruk}`, m)
             }
             break
             case 'haribaik': {
@@ -2321,7 +2321,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.petung_hari_baik(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Lahir :* ${anu.message.tgl_lahir}\n⌗ *Kala Tinantang :* ${anu.message.kala_tinantang}\n⌗ *Info :* ${anu.message.info}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.tgl_lahir}\n? *Kala Tinantang :* ${anu.message.kala_tinantang}\n? *Info :* ${anu.message.info}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'harisangar': case 'taliwangke': {
@@ -2329,7 +2329,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.hari_sangar_taliwangke(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Lahir :* ${anu.message.tgl_lahir}\n⌗ *Hasil :* ${anu.message.result}\n⌗ *Info :* ${anu.message.info}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Info :* ${anu.message.info}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'harinaas': case 'harisial': {
@@ -2337,7 +2337,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.primbon_hari_naas(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Hari Lahir :* ${anu.message.hari_lahir}\n⌗ *Tanggal Lahir :* ${anu.message.tgl_lahir}\n⌗ *Hari Naas :* ${anu.message.hari_naas}\n⌗ *Info :* ${anu.message.catatan}\n⌗ *Catatan :* ${anu.message.info}`, m)
+                zens.sendText(m.chat, `? *Hari Lahir :* ${anu.message.hari_lahir}\n? *Tanggal Lahir :* ${anu.message.tgl_lahir}\n? *Hari Naas :* ${anu.message.hari_naas}\n? *Info :* ${anu.message.catatan}\n? *Catatan :* ${anu.message.info}`, m)
             }
             break
             case 'nagahari': case 'harinaga': {
@@ -2345,7 +2345,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.rahasia_naga_hari(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Hari Lahir :* ${anu.message.hari_lahir}\n⌗ *Tanggal Lahir :* ${anu.message.tgl_lahir}\n⌗ *Arah Naga Hari :* ${anu.message.arah_naga_hari}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Hari Lahir :* ${anu.message.hari_lahir}\n? *Tanggal Lahir :* ${anu.message.tgl_lahir}\n? *Arah Naga Hari :* ${anu.message.arah_naga_hari}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'arahrejeki': case 'arahrezeki': {
@@ -2353,7 +2353,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.primbon_arah_rejeki(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Hari Lahir :* ${anu.message.hari_lahir}\n⌗ *tanggal Lahir :* ${anu.message.tgl_lahir}\n⌗ *Arah Rezeki :* ${anu.message.arah_rejeki}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Hari Lahir :* ${anu.message.hari_lahir}\n? *tanggal Lahir :* ${anu.message.tgl_lahir}\n? *Arah Rezeki :* ${anu.message.arah_rejeki}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'peruntungan': {
@@ -2361,7 +2361,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama, tgl, bln, thn, untuk] = text.split`,`
                 let anu = await primbon.ramalan_peruntungan(nama, tgl, bln, thn, untuk)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama :* ${anu.message.nama}\n⌗ *Lahir :* ${anu.message.tgl_lahir}\n⌗ *Peruntungan Tahun :* ${anu.message.peruntungan_tahun}\n⌗ *Hasil :* ${anu.message.result}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Peruntungan Tahun :* ${anu.message.peruntungan_tahun}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'weton': case 'wetonjawa': {
@@ -2369,7 +2369,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.weton_jawa(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Tanggal :* ${anu.message.tanggal}\n⌗ *Jumlah Neptu :* ${anu.message.jumlah_neptu}\n⌗ *Watak Hari :* ${anu.message.watak_hari}\n⌗ *Naga Hari :* ${anu.message.naga_hari}\n⌗ *Jam Baik :* ${anu.message.jam_baik}\n⌗ *Watak Kelahiran :* ${anu.message.watak_kelahiran}`, m)
+                zens.sendText(m.chat, `? *Tanggal :* ${anu.message.tanggal}\n? *Jumlah Neptu :* ${anu.message.jumlah_neptu}\n? *Watak Hari :* ${anu.message.watak_hari}\n? *Naga Hari :* ${anu.message.naga_hari}\n? *Jam Baik :* ${anu.message.jam_baik}\n? *Watak Kelahiran :* ${anu.message.watak_kelahiran}`, m)
             }
             break
             case 'sifat': case 'karakter': {
@@ -2377,7 +2377,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama, tgl, bln, thn] = text.split`,`
                 let anu = await primbon.sifat_karakter_tanggal_lahir(nama, tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama :* ${anu.message.nama}\n⌗ *Lahir :* ${anu.message.tgl_lahir}\n⌗ *Garis Hidup :* ${anu.message.garis_hidup}`, m)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Garis Hidup :* ${anu.message.garis_hidup}`, m)
             }
             break
             case 'keberuntungan': {
@@ -2385,7 +2385,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [nama, tgl, bln, thn] = text.split`,`
                 let anu = await primbon.potensi_keberuntungan(nama, tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Nama :* ${anu.message.nama}\n⌗ *Lahir :* ${anu.message.tgl_lahir}\n⌗ *Hasil :* ${anu.message.result}`, m)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Hasil :* ${anu.message.result}`, m)
             }
             break
             case 'memancing': {
@@ -2393,7 +2393,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn] = text.split`,`
                 let anu = await primbon.primbon_memancing_ikan(tgl, bln, thn)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Hasil :* ${anu.message.result}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'masasubur': {
@@ -2401,7 +2401,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 let [tgl, bln, thn, siklus] = text.split`,`
                 let anu = await primbon.masa_subur(tgl, bln, thn, siklus)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Hasil :* ${anu.message.result}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             case 'zodiak': case 'zodiac': {
@@ -2436,7 +2436,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 
                 let anu = await primbon.zodiak(zodiac)
                 if (anu.status == false) return m.reply(anu.message)
-                zens.sendText(m.chat, `⌗ *Zodiak :* ${anu.message.zodiak}\n⌗ *Nomor :* ${anu.message.nomor_keberuntungan}\n⌗ *Aroma :* ${anu.message.aroma_keberuntungan}\n⌗ *Planet :* ${anu.message.planet_yang_mengitari}\n⌗ *Bunga :* ${anu.message.bunga_keberuntungan}\n⌗ *Warna :* ${anu.message.warna_keberuntungan}\n⌗ *Batu :* ${anu.message.batu_keberuntungan}\n⌗ *Elemen :* ${anu.message.elemen_keberuntungan}\n⌗ *Pasangan Zodiak :* ${anu.message.pasangan_zodiak}\n⌗ *Catatan :* ${anu.message.catatan}`, m)
+                zens.sendText(m.chat, `? *Zodiak :* ${anu.message.zodiak}\n? *Nomor :* ${anu.message.nomor_keberuntungan}\n? *Aroma :* ${anu.message.aroma_keberuntungan}\n? *Planet :* ${anu.message.planet_yang_mengitari}\n? *Bunga :* ${anu.message.bunga_keberuntungan}\n? *Warna :* ${anu.message.warna_keberuntungan}\n? *Batu :* ${anu.message.batu_keberuntungan}\n? *Elemen :* ${anu.message.elemen_keberuntungan}\n? *Pasangan Zodiak :* ${anu.message.pasangan_zodiak}\n? *Catatan :* ${anu.message.catatan}`, m)
             }
             break
             
@@ -2480,13 +2480,13 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                     if (!id) throw `No Query username, Example : ${prefix + command} ig cak_haho`
                     let { result: anu } = await fetchJson(api('zenz', '/api/stalker/ig', { username: id }, 'apikey'))
                     if (anu.status == false) return m.reply(anu.result.message)
-                    zens.sendMedia(m.chat, anu.caption.profile_hd, '', `⌗ Full Name : ${anu.caption.full_name}\n⌗ User Name : ${anu.caption.user_name}\n⌗ ID ${anu.caption.user_id}\n⌗ Followers : ${anu.caption.followers}\n⌗ Following : ${anu.caption.following}\n⌗ Bussines : ${anu.caption.bussines}\n⌗ Profesional : ${anu.caption.profesional}\n⌗ Verified : ${anu.caption.verified}\n⌗ Private : ${anu.caption.private}\n⌗ Bio : ${anu.caption.biography}\n⌗ Bio Url : ${anu.caption.bio_url}`, m)
+                    zens.sendMedia(m.chat, anu.caption.profile_hd, '', `? Full Name : ${anu.caption.full_name}\n? User Name : ${anu.caption.user_name}\n? ID ${anu.caption.user_id}\n? Followers : ${anu.caption.followers}\n? Following : ${anu.caption.following}\n? Bussines : ${anu.caption.bussines}\n? Profesional : ${anu.caption.profesional}\n? Verified : ${anu.caption.verified}\n? Private : ${anu.caption.private}\n? Bio : ${anu.caption.biography}\n? Bio Url : ${anu.caption.bio_url}`, m)
 		    db.data.users[m.sender].limit -= 1
                 } else if (type.toLowerCase() == 'npm') {
                     if (!id) throw `No Query username, Example : ${prefix + command} npm scrape-primbon`
                     let { result: anu } = await fetchJson(api('zenz', '/api/stalker/npm', { query: id }, 'apikey'))
                     if (anu.status == false) return m.reply(anu.result.message)
-                    m.reply(`⌗ Name : ${anu.name}\n⌗ Version : ${Object.keys(anu.versions)}\n⌗ Created : ${tanggal(anu.time.created)}\n⌗ Modified : ${tanggal(anu.time.modified)}\n⌗ Maintainers :\n ${anu.maintainers.map(v => `- ${v.name} : ${v.email}`).join('\n')}\n\n⌗ Description : ${anu.description}\n⌗ Homepage : ${anu.homepage}\n⌗ Keywords : ${anu.keywords}\n⌗ Author : ${anu.author.name}\n⌗ License : ${anu.license}\n⌗ Readme : ${anu.readme}`)
+                    m.reply(`? Name : ${anu.name}\n? Version : ${Object.keys(anu.versions)}\n? Created : ${tanggal(anu.time.created)}\n? Modified : ${tanggal(anu.time.modified)}\n? Maintainers :\n ${anu.maintainers.map(v => `- ${v.name} : ${v.email}`).join('\n')}\n\n? Description : ${anu.description}\n? Homepage : ${anu.homepage}\n? Keywords : ${anu.keywords}\n? Author : ${anu.author.name}\n? License : ${anu.license}\n? Readme : ${anu.readme}`)
 		    db.data.users[m.sender].limit -= 1
                 } else {
                     m.reply(`Example : ${prefix +command} type id\n\nList Type :\n1. ff (Free Fire)\n2. ml (Mobile Legends)\n3. aov (Arena Of Valor)\n4. cod (Call Of Duty)\n5. pb (point Blank)\n6. ig (Instagram)\n7. npm (https://npmjs.com)`)
@@ -2498,8 +2498,8 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 m.reply(mess.wait)
                 let anu = await fetchJson(`https://anabotofc.herokuapp.com/api/download/tiktok2?url=${text}&apikey=AnaBot`)
                 let buttons = [
-                    {buttonId: `allmenu`, buttonText: {displayText: '⌕ List Menu'}, type: 1},
-                    {buttonId: `tiktokmp3 ${text}`, buttonText: {displayText: '♫ Audio'}, type: 1}
+                    {buttonId: `allmenu`, buttonText: {displayText: '? List Menu'}, type: 1},
+                    {buttonId: `tiktokmp3 ${text}`, buttonText: {displayText: '? Audio'}, type: 1}
                 ]
                 let buttonMessage = {
                     video: { url: anu.result.nowm },
@@ -2516,8 +2516,8 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 m.reply(mess.wait)
                 let anu = await fetchJson(`https://botcahx-rest-api.herokuapp.com/api/dowloader/tikok?url=${text}`)
                 let buttons = [
-                    {buttonId: `tiktoknowm ${text}`, buttonText: {displayText: '► No Watermark'}, type: 1},
-                    {buttonId: `tiktokmp3 ${text}`, buttonText: {displayText: '♫ Audio'}, type: 1}
+                    {buttonId: `tiktoknowm ${text}`, buttonText: {displayText: '? No Watermark'}, type: 1},
+                    {buttonId: `tiktokmp3 ${text}`, buttonText: {displayText: '? Audio'}, type: 1}
                 ]
                 let buttonMessage = {
                     video: { url: anu.result.video_original },
@@ -2534,8 +2534,8 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 m.reply(mess.wait)
                 let anu = await fetchJson(`https://anabotofc.herokuapp.com/api/download/tiktok2?url=${text}&apikey=AnaBot`)
                 let buttons = [
-                    {buttonId: `allmenu`, buttonText: {displayText: '⌕ List Menu'}, type: 1},
-                    {buttonId: `tiktoknowm ${text}`, buttonText: {displayText: '► No Watermark'}, type: 1}
+                    {buttonId: `allmenu`, buttonText: {displayText: '? List Menu'}, type: 1},
+                    {buttonId: `tiktoknowm ${text}`, buttonText: {displayText: '? No Watermark'}, type: 1}
                 ]
                 let buttonMessage = {
                     text: `Download From ${text}`,
@@ -2563,7 +2563,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 if (!text) throw 'No Query Title'
                 m.reply(mess.wait)
                 let anu = await fetchJson(api('zenz', '/downloader/joox', { query: text }, 'apikey'))
-                let msg = await zens.sendImage(m.chat, anu.result.img, `⌗ Title : ${anu.result.lagu}\n⌗ Album : ${anu.result.album}\n⌗ Singer : ${anu.result.penyanyi}\n⌗ Publish : ${anu.result.publish}\n⌗ Lirik :\n${anu.result.lirik.result}`, m)
+                let msg = await zens.sendImage(m.chat, anu.result.img, `? Title : ${anu.result.lagu}\n? Album : ${anu.result.album}\n? Singer : ${anu.result.penyanyi}\n? Publish : ${anu.result.publish}\n? Lirik :\n${anu.result.lirik.result}`, m)
                 zens.sendMessage(m.chat, { audio: { url: anu.result.mp4aLink }, mimetype: 'audio/mpeg', fileName: anu.result.lagu+'.m4a' }, { quoted: msg })
             }
             break
@@ -2571,7 +2571,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 if (!text) throw 'No Query Title'
                 m.reply(mess.wait)
                 let anu = await fetchJson(api('zenz', '/downloader/soundcloud', { url: isUrl(text)[0] }, 'apikey'))
-                let msg = await zens.sendImage(m.chat, anu.result.thumb, `⌗ Title : ${anu.result.title}\n⌗ Url : ${isUrl(text)[0]}`)
+                let msg = await zens.sendImage(m.chat, anu.result.thumb, `? Title : ${anu.result.title}\n? Url : ${isUrl(text)[0]}`)
                 zens.sendMessage(m.chat, { audio: { url: anu.result.url }, mimetype: 'audio/mpeg', fileName: anu.result.title+'.m4a' }, { quoted: msg })
             }
             break
@@ -2580,7 +2580,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 m.reply(mess.wait)
                 let anu = await fetchJson(api('zenz', '/api/downloader/twitter', { url: text }, 'apikey'))
                 let buttons = [
-                    {buttonId: `twittermp3 ${text}`, buttonText: {displayText: '► Audio'}, type: 1}
+                    {buttonId: `twittermp3 ${text}`, buttonText: {displayText: '? Audio'}, type: 1}
                 ]
                 let buttonMessage = {
                     video: { url: anu.result.HD || anu.result.SD },
@@ -2597,7 +2597,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 m.reply(mess.wait)
                 let anu = await fetchJson(api('zenz', '/api/downloader/twitter', { url: text }, 'apikey'))
                 let buttons = [
-                    {buttonId: `twitter ${text}`, buttonText: {displayText: '► Video'}, type: 1}
+                    {buttonId: `twitter ${text}`, buttonText: {displayText: '? Video'}, type: 1}
                 ]
                 let buttonMessage = {
 		    image: { url: anu.result.thumb },
@@ -2614,7 +2614,7 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
                 if (!text) throw 'Masukkan Query Link!'
                 m.reply(mess.wait)
                 let anu = await fetchJson(api('zenz', '/api/downloader/facebook', { url: text }, 'apikey'))
-                zens.sendMessage(m.chat, { video: { url: anu.result.url }, caption: `⌗ Title : ${anu.result.title}`}, { quoted: m })
+                zens.sendMessage(m.chat, { video: { url: anu.result.url }, caption: `? Title : ${anu.result.title}`}, { quoted: m })
             }
             break
 	        case 'pindl': case 'pinterestdl': {
@@ -2630,17 +2630,17 @@ case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'meg
 		let anu = await umma(isUrl(text)[0])
 		if (anu.type == 'video') {
 		    let buttons = [
-                        {buttonId: `ytmp3 ${anu.media[0]} 128kbps`, buttonText: {displayText: '♫ Audio'}, type: 1},
-                        {buttonId: `ytmp4 ${anu.media[0]} 360p`, buttonText: {displayText: '► Video'}, type: 1}
+                        {buttonId: `ytmp3 ${anu.media[0]} 128kbps`, buttonText: {displayText: '? Audio'}, type: 1},
+                        {buttonId: `ytmp4 ${anu.media[0]} 360p`, buttonText: {displayText: '? Video'}, type: 1}
                     ]
 		    let buttonMessage = {
 		        image: { url: anu.author.profilePic },
 			caption: `
-⌗ Title : ${anu.title}
-⌗ Author : ${anu.author.name}
-⌗ Like : ${anu.like}
-⌗ Caption : ${anu.caption}
-⌗ Url : ${anu.media[0]}
+? Title : ${anu.title}
+? Author : ${anu.author.name}
+? Like : ${anu.like}
+? Caption : ${anu.caption}
+? Url : ${anu.media[0]}
 Untuk Download Media Silahkan Klik salah satu Button dibawah ini atau masukkan command ytmp3/ytmp4 dengan url diatas
 `,
 			footer: zens.user.name,
@@ -2650,7 +2650,7 @@ Untuk Download Media Silahkan Klik salah satu Button dibawah ini atau masukkan c
 		    zens.sendMessage(m.chat, buttonMessage, { quoted: m })
 		} else if (anu.type == 'image') {
 		    anu.media.map(async (url) => {
-		        zens.sendMessage(m.chat, { image: { url }, caption: `⌗ Title : ${anu.title}\n⌗ Author : ${anu.author.name}\n⌗ Like : ${anu.like}\n⌗ Caption : ${anu.caption}` }, { quoted: m })
+		        zens.sendMessage(m.chat, { image: { url }, caption: `? Title : ${anu.title}\n? Author : ${anu.author.name}\n? Like : ${anu.like}\n? Caption : ${anu.caption}` }, { quoted: m })
 		    })
 		}
 	    }
@@ -2743,7 +2743,7 @@ ${id}`)
 		if (!args[0]) throw `Contoh penggunaan:\n${prefix + command} 1 2\n\nmaka hasilnya adalah tafsir surah Al-Fatihah ayat 2`
 		if (!args[1]) throw `Contoh penggunaan:\n${prefix + command} 1 2\n\nmaka hasilnya adalah tafsir surah Al-Fatihah ayat 2`
 		let res = await fetchJson(`https://islamic-api-indonesia.herokuapp.com/api/data/quran?surah=${args[0]}&ayat=${args[1]}`)
-		let txt = `「 *Tafsir Surah*  」
+		let txt = `? *Tafsir Surah*  ?
 
 *Pendek* : ${res.result.data.tafsir.id.short}
 
@@ -2757,12 +2757,12 @@ ${id}`)
 		case 'playstore': {
             if (!text) throw `Example : ${prefix + command} clash of clans`
             let res = await fetchJson(api('zenz', '/webzone/playstore', { query: text }, 'apikey'))
-            let teks = `⌗ Playstore Search From : ${text}\n\n`
+            let teks = `? Playstore Search From : ${text}\n\n`
             for (let i of res.result) {
-            teks += `⌗ Name : ${i.name}\n`
-            teks += `⌗ Link : ${i.link}\n`
-            teks += `⌗ Developer : ${i.developer}\n`
-            teks += `⌗ Link Developer : ${i.link_dev}\n\n──────────────────────\n`
+            teks += `? Name : ${i.name}\n`
+            teks += `? Link : ${i.link}\n`
+            teks += `? Developer : ${i.developer}\n`
+            teks += `? Link Developer : ${i.link_dev}\n\n----------------------\n`
             }
             m.reply(teks)
             }
@@ -2771,20 +2771,20 @@ ${id}`)
             if (!text) throw `Example : ${prefix + command} samsung`
             let res = await fetchJson(api('zenz', '/webzone/gsmarena', { query: text }, 'apikey'))
             let { judul, rilis, thumb, ukuran, type, storage, display, inchi, pixel, videoPixel, ram, chipset, batrai, merek_batre, detail } = res.result
-let capt = `⌗ Title: ${judul}
-⌗ Realease: ${rilis}
-⌗ Size: ${ukuran}
-⌗ Type: ${type}
-⌗ Storage: ${storage}
-⌗ Display: ${display}
-⌗ Inchi: ${inchi}
-⌗ Pixel: ${pixel}
-⌗ Video Pixel: ${videoPixel}
-⌗ Ram: ${ram}
-⌗ Chipset: ${chipset}
-⌗ Battery: ${batrai}
-⌗ Battery Brand: ${merek_batre}
-⌗ Detail: ${detail}`
+let capt = `? Title: ${judul}
+? Realease: ${rilis}
+? Size: ${ukuran}
+? Type: ${type}
+? Storage: ${storage}
+? Display: ${display}
+? Inchi: ${inchi}
+? Pixel: ${pixel}
+? Video Pixel: ${videoPixel}
+? Ram: ${ram}
+? Chipset: ${chipset}
+? Battery: ${batrai}
+? Battery Brand: ${merek_batre}
+? Detail: ${detail}`
             zens.sendImage(m.chat, thumb, capt, m)
             }
             break
@@ -2793,9 +2793,9 @@ let capt = `⌗ Title: ${judul}
             let res = await fetchJson(api('zenz', '/webzone/jadwalbioskop', { kota: text }, 'apikey'))
             let capt = `Jadwal Bioskop From : ${text}\n\n`
             for (let i of res.result){
-            capt += `⌗ Title: ${i.title}\n`
-            capt += `⌗ Thumbnail: ${i.thumb}\n`
-            capt += `⌗ Url: ${i.url}\n\n──────────────────────\n`
+            capt += `? Title: ${i.title}\n`
+            capt += `? Thumbnail: ${i.thumb}\n`
+            capt += `? Url: ${i.url}\n\n----------------------\n`
             }
             zens.sendImage(m.chat, res.result[0].thumb, capt, m)
             }
@@ -2804,9 +2804,9 @@ let capt = `⌗ Title: ${judul}
             let res = await fetchJson(api('zenz', '/webzone/nowplayingbioskop', {}, 'apikey'))
             let capt = `Now Playing Bioskop\n\n`
             for (let i of res.result){
-            capt += `⌗ Title: ${i.title}\n`
-            capt += `⌗ Url: ${i.url}\n`
-            capt += `⌗ Img Url: ${i.img}\n\n──────────────────────\n`
+            capt += `? Title: ${i.title}\n`
+            capt += `? Url: ${i.url}\n`
+            capt += `? Img Url: ${i.img}\n\n----------------------\n`
             }
             zens.sendImage(m.chat, res.result[0].img, capt, m)
             }
@@ -2816,11 +2816,11 @@ let capt = `⌗ Title: ${judul}
             let res = await fetchJson(api('zenz', '/webzone/amino', { query: text }, 'apikey'))
             let capt = `Amino Search From : ${text}\n\n`
             for (let i of res.result){
-            capt += `⌗ Community: ${i.community}\n`
-            capt += `⌗ Community Link: ${i.community_link}\n`
-            capt += `⌗ Thumbnail: ${i.community_thumb}\n`
-            capt += `⌗ Description: ${i.community_desc}\n`
-            capt += `⌗ Member Count: ${i.member_count}\n\n──────────────────────\n`
+            capt += `? Community: ${i.community}\n`
+            capt += `? Community Link: ${i.community_link}\n`
+            capt += `? Thumbnail: ${i.community_thumb}\n`
+            capt += `? Description: ${i.community_desc}\n`
+            capt += `? Member Count: ${i.member_count}\n\n----------------------\n`
             }
             zens.sendImage(m.chat, 'https://'+res.result[0].community_thumb, capt, m)
             }
@@ -2830,13 +2830,13 @@ let capt = `⌗ Title: ${judul}
             let res = await fetchJson(api('zenz', '/webzone/wattpad', { query: text }, 'apikey'))
             let { judul, dibaca, divote, bab, waktu, url, thumb, description } = res.result[0]
             let capt = `Wattpad From ${text}\n\n`
-            capt += `⌗ Judul: ${judul}\n`
-            capt += `⌗ Dibaca: ${dibaca}\n`
-            capt += `⌗ Divote: ${divote}\n`
-            capt += `⌗ Bab: ${bab}\n`
-            capt += `⌗ Waktu: ${waktu}\n`
-            capt += `⌗ Url: ${url}\n`
-            capt += `⌗ Deskripsi: ${description}`
+            capt += `? Judul: ${judul}\n`
+            capt += `? Dibaca: ${dibaca}\n`
+            capt += `? Divote: ${divote}\n`
+            capt += `? Bab: ${bab}\n`
+            capt += `? Waktu: ${waktu}\n`
+            capt += `? Url: ${url}\n`
+            capt += `? Deskripsi: ${description}`
             zens.sendImage(m.chat, thumb, capt, m)
             }
             break
@@ -2845,11 +2845,11 @@ let capt = `⌗ Title: ${judul}
             let res = await fetchJson(api('zenz', '/webzone/webtoons', { query: text }, 'apikey'))
             let capt = `Webtoons Search From : ${text}\n\n`
             for (let i of res.result) {
-            capt += `⌗ Judul: ${i.judul}\n`
-            capt += `⌗ Like: ${i.like}\n`
-            capt += `⌗ Creator: ${i.creator}\n`
-            capt += `⌗ Genre: ${i.genre}\n`
-            capt += `⌗ Url: ${i.url}\n\n──────────────────────\n`
+            capt += `? Judul: ${i.judul}\n`
+            capt += `? Like: ${i.like}\n`
+            capt += `? Creator: ${i.creator}\n`
+            capt += `? Genre: ${i.genre}\n`
+            capt += `? Url: ${i.url}\n\n----------------------\n`
             }
             m.reply(capt)
             }
@@ -2859,11 +2859,11 @@ let capt = `⌗ Title: ${judul}
             let res = await fetchJson(api('zenz', '/webzone/drakor', { query: text }, 'apikey'))
             let capt = `Drakor Search From : ${text}\n\n`
             for (let i of res.result) {
-            capt += `⌗ Judul: ${i.judul}\n`
-            capt += `⌗ Years: ${i.years}\n`
-            capt += `⌗ Genre: ${i.genre}\n`
-            capt += `⌗ Url: ${i.url}\n`
-            capt += `⌗ Thumbnail Url: ${i.thumbnail}\n\n──────────────────────\n`
+            capt += `? Judul: ${i.judul}\n`
+            capt += `? Years: ${i.years}\n`
+            capt += `? Genre: ${i.genre}\n`
+            capt += `? Url: ${i.url}\n`
+            capt += `? Thumbnail Url: ${i.thumbnail}\n\n----------------------\n`
             }
             zens.sendImage(m.chat, res.result[0].thumbnail, capt, m)
             }
@@ -2874,12 +2874,12 @@ let capt = `⌗ Title: ${judul}
                goblok = fs.readFileSync('./sound/rules.mp3')
 zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
 {
-rules = `┌──⭓ *Rules BOT*
-│
-│ *No Spam & Telp❗*
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '👑Sewa' }, type: 1 }]
+rules = `+--? *Rules BOT*
+¦
+¦ *No Spam & Telp?*
+¦
++-------????`
+let buttons = [{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '??Sewa' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, rules, nyoutube, m, {quoted: fkontak})
             }
             break
@@ -2902,7 +2902,7 @@ let alfamart = `628111500959@s.whatsapp.net`
 -Creator :  @${ownernya.split('@')[0]}\n-Lu : @${me.split('@')[0]}\n-Powered  : @${ini_mark.split('@')[0]}\n- :  @${qontak.split('@')[0]}\n- :  @${dana.split('@')[0]}\n- :  @${shopeeotp.split('@')[0]}\n- :  @${shopee.split('@')[0]}\n- :  @${tokopedia.split('@')[0]}\n- :  @${smartfrend.split('@')[0]}\n- :  @${getcontact.split('@')[0]}\n- :  @${facebook.split('@')[0]}\n- :  @${pasarpolis.split('@')[0]}\n- :  @${getcontact.split('@')[0]}\n- :  @${kominfo.split('@')[0]}\n- :  @${alfamart.split('@')[0]}`
             let ments = [ownernya, me, ini_mark, qontak, dana, shopeeotp, shopee, tokopedia, smartfrend, getcontact, facebook, pasarpolis, kominfo, alfamart]
             let buttons = [
-                        { buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 }
+                        { buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 }
                     ]
                     await zens.sendButtonText(m.chat, buttons, jawab, zens.user.name, m, {mentions: ments})
             }
@@ -2914,474 +2914,412 @@ zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quo
             let ownernya = ownernomer + '@s.whatsapp.net'
             let me = m.sender
             let jawab = `*${ucapanWaktu}*
-╭──❏「 𝐈𝐍𝐅𝐎 𝐔𝐒𝐄𝐑 」❏*
-├ *Nama* : ${pushname}
-├ *Number* : @${me.split('@')[0]}
-├ *Premium* : ${isPremium ? '✅' : `❌`}
-├ *Limit* : ${isPremium ? '♾Infinity' : `〽️${db.data.users[m.sender].limit}`}
-╰──❏
+?--?? ???????? ???????? ??*
++ *Nama* : ${pushname}
++ *Number* : @${me.split('@')[0]}
++ *Premium* : ${isPremium ? '?' : `?`}
++ *Limit* : ${isPremium ? '?Infinity' : `??${db.data.users[m.sender].limit}`}
+?--?
 
-╭──❏「 𝐈𝐍𝐅𝐎 𝐁𝐎𝐓 」❏
-├ *Nama Bot* : ${pushname}
-├ *Powered* : @${ini_mark.split('@')[0]}
-├ *Owner* : @${ownernya.split('@')[0]}
-├ *Mode* : ${zens.public ? 'Public' : `Self`}
-├ *Prefix* :「 MULTI-PREFIX 」
-╰──❏
+?--?? ???????? ?????? ??
++ *Nama CS* : ${pushname}
++ *Powered* : @${ini_mark.split('@')[0]}
++ *Owner* : @${ownernya.split('@')[0]}
++ *Mode* : ${zens.public ? 'Public' : `Self`}
++ *Prefix* :? MULTI-PREFIX ?
+?--?
 
-╭──❏「 𝐈𝐍𝐃𝐎𝐍𝐄𝐒𝐈𝐀 𝐓𝐈𝐌𝐄 」❏
-├ *Hari Ini* : ${hariini}
-├ *Wib* : ${barat} WIB
-├ *Wita* : ${tengah} WITA
-├ *Wit* : ${timur} WIT
-╰──❏`
+?--?? ?????????????????? ???????? ??
++ *Hari Ini* : ${hariini}
++ *Wib* : ${barat} WIB
++ *Wita* : ${tengah} WITA
++ *Wit* : ${timur} WIT
+?--?
+
+
+`
             let ments = [ownernya, me, ini_mark]
-            let buttons = [{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'rules', buttonText: { displayText: '⌕ Rules' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+            let buttons = [{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'rules', buttonText: { displayText: '? Rules' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m, {mentions: ments, quoted: fkontak})
             } 
 break
-            case 'simplemenu': case 'list': case 'help': {
+            case 'daftardiri': case 'list': case 'help': {
             let ownernya = ownernomer + '@s.whatsapp.net'
             let me = m.sender
             let ments = [ownernya, me, ini_mark]
             let kukiw = `*${ucapanWaktu}*
-╭──❏「 𝙄𝙉𝙁𝙊 𝙐𝙎𝙀𝙍 」❏
-├ *Nama* : ${pushname}
-├ *Number* : ${me.split('@')[0]}
-├ *Premium* : ${isPremium ? '✅' : `❌`}
-├ *Limit* : ${isPremium ? '♾Infinity' : `〽️${db.data.users[m.sender].limit}`}
-╰──❏
+?--?? ???????? ???????? ??
++ *Nama* : ${pushname}
++ *Number* : ${me.split('@')[0]}
++ *Premium* : ${isPremium ? '?' : `?`}
++ *Limit* : ${isPremium ? '?Infinity' : `??${db.data.users[m.sender].limit}`}
+?--?
 
-╭──❏「 𝙄𝙉𝙁𝙊 𝘽𝙊𝙏 」❏
-├ *Nama Bot* : ${pushname}
-├ *Mode* : ${zens.public ? 'Public' : `Self`}
-├ *Prefix* :「 MULTI-PREFIX 」
-╰──
+?--?? ???????? ?????? ??
++ *Nama Bot* : ${pushname}
++ *Mode* : ${zens.public ? 'Public' : `Self`}
++ *Prefix* :? MULTI-PREFIX ?
+?--
 
-╭──❏「 𝙄𝙉𝘿𝙊𝙉𝙀𝙎𝙄𝘼𝙉 𝙏𝙄𝙈𝙀 」❏
-├ *Hari Ini* : ${hariini}
-├ *Wib* : ${barat} WIB
-├ *Wita* : ${tengah} WITA
-├ *Wit* : ${timur} WIT
-╰──❏`
+?--?? ???????????????????? ???????? ??
++ *Hari Ini* : ${hariini}
++ *Wib* : ${barat} WIB
++ *Wita* : ${tengah} WITA
++ *Wit* : ${timur} WIT
+?--?`
                 let sections = [
                 {
                 title: "CHANGE MENU BOT",
                 rows: [
-                {title: "Group", rowId: `mgroup`, description: `👥Group Menu`},
-                {title: "Webzone", rowId: `mwebzone`, description: `📹Webzone Menu`},
-                {title: "Downloader", rowId: `mdownloader`, description: `📥Downloader Menu`},
-                {title: "Search", rowId: `msearch`, description: `🔍Search Menu`},
-                {title: "Random", rowId: `mrandom`, description: `❔Random Menu`},
-                {title: "Text Pro", rowId: `mtextpro`, description: `❇Text Pro Menu`},
-                {title: "Photo Oxy", rowId: `mphotooxy`, description: `♻️Photo Oxy Menu`},
-                {title: "Ephoto", rowId: `mephoto`, description: `🗳Ephoto Menu`},
-                {title: "Fun", rowId: `mfun`, description: `🔫Fun Menu`},
-                {title: "Primbon", rowId: `mprimbon`, description: `😂Primbon Menu`},
-                {title: "Convert", rowId: `mconvert`, description: `🛠Convert Menu`},
-                {title: "Main", rowId: `mmain`, description: `💾Main Menu`},
-                {title: "Database", rowId: `mdatabase`, description: `📁Database Menu`},
-                {title: "Anonymous", rowId: `manonymous`, description: `🎭Anonymous Menu`},
-                {title: "Islamic", rowId: `mislamic`, description: `🕌Islamic Menu`},
-                {title: "Voice", rowId: `mvoice`, description: `🎶Voice Menu`},
-                {title: "Owner", rowId: `mowner`, description: `🎟Owner Menu`}
+                {title: "Isi Data Diri", rowId: `mgroup`, description: `Daftarkan Diri`},
+                {title: "List Harga Tiket", rowId: `mwebzone`, description: `Tampilkan Harga Tiket`},
+                {title: "List Jam Berangkat", rowId: `mdownloader`, description: `Tampilkan Keberangkatan Tiket`},
+                {title: "Perlu Bantuan", rowId: `msearch`, description: `Butuh Bantuan CS Bot`},
+                {title: "Lokasi Agen", rowId: `mrandom`, description: `Tampilkan Lokasi Agen Terdekat`},
+                {title: "Lihat Informasi Terbaru", rowId: `mtextpro`, description: `Info Terkini Tentang Kami`},
+                {title: "Pembayaran Online", rowId: `mowner`, description: `Pembayaran Dengan Mudah`}
                 ]
                 },
                 ]
-                zens.sendListMsg(m.chat, kukiw, nyoutube, `*Hello Kak ${pushname}*!`, `Pilih Menu`, sections, m, {quoted: fkontak})
+                zens.sendListMsg(m.chat, kukiw, nyoutube, `*Hello Kak ${pushname}*!`, `Click Here`, sections, m, {quoted: fkontak})
             }
             break
             case 'mgroup': {
-goup = `┌──⭓ *Group Menu*
-│
-│⭔ ${prefix}linkgroup
-│⭔ ${prefix}ephemeral [option]
-│⭔ ${prefix}setppgc [image]
-│⭔ ${prefix}setname [text]
-│⭔ ${prefix}setdesc [text]
-│⭔ ${prefix}group [option]
-│⭔ ${prefix}editinfo [option]
-│⭔ ${prefix}add @user
-│⭔ ${prefix}kick @user
-│⭔ ${prefix}hidetag [text]
-│⭔ ${prefix}tagall [text]
-│⭔ ${prefix}antilink [on/off]
-│⭔ ${prefix}mute [on/off]
-│⭔ ${prefix}promote @user
-│⭔ ${prefix}demote @user
-│⭔ ${prefix}vote [text]
-│⭔ ${prefix}devote
-│⭔ ${prefix}upvote
-│⭔ ${prefix}cekvote
-│⭔ ${prefix}hapusvote
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+goup = `Hai Kak Silakan Isi Form Pendaftaran DiBawah ini
+
+Nama : 
+Nama Bus :
+Nomor HP : 
+Tujuan :
+Pembayaran Via :
+
+Screen Shot Bukti Pembayaran Ke CS Dibawah Ini`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
             }
             break
       case 'mwebzone': {
-wbzone = `┌──⭓ *Webzone Menu*
-│
-│⭔ ${prefix}playstore
-│⭔ ${prefix}gsmarena
-│⭔ ${prefix}jadwalbioskop
-│⭔ ${prefix}nowplayingbioskop
-│⭔ ${prefix}aminio
-│⭔ ${prefix}wattpad
-│⭔ ${prefix}webtoons
-│⭔ ${prefix}drakor
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
-            await zens.sendButtonText(m.chat, buttons, wbzone, nyoutube, m, {quoted: fkontak})
+wbzone = `List Harga Tiket
+
+Medali Mas : Mulai Dari Harga 310 Sampai 320
+Gunung Harta : Mulai Dari Harga 320 sampai 340
+Agra Mas : Mulai Dari Harga 310 Sampai 330
+Pandawa87 : Mulai Dari Harga 330
+Keramat Jati : Mulai Dari 310 Sampai 630
+BandungExpress : Mulai Dari 300
+Angkasa Trans : Mulai Dari 260 
+Setiawan : Mulai Dari 260
+RestuMulia : Mulai Dari 275
+Lorena : Mulai Dari 620 Sampai 650`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mdownloader': {
-dwnloader = `┌──⭓ *Downloader Menu*
-│
-│⭔ ${prefix}tiktoknowm [url]
-│⭔ ${prefix}tiktokwm [url]
-│⭔ ${prefix}tiktokmp3 [url]
-│⭔ ${prefix}instagram [url]
-│⭔ ${prefix}twitter [url]
-│⭔ ${prefix}twittermp3 [url]
-│⭔ ${prefix}facebook [url]
-│⭔ ${prefix}pinterestdl [url]
-│⭔ ${prefix}ytmp3 [url]
-│⭔ ${prefix}ytmp4 [url]
-│⭔ ${prefix}getmusic [query]
-│⭔ ${prefix}getvideo [query]
-│⭔ ${prefix}umma [url]
-│⭔ ${prefix}joox [query]
-│⭔ ${prefix}soundcloud [url]
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
-            await zens.sendButtonText(m.chat, buttons, dwnloader, nyoutube, m, {quoted: fkontak})
+dwnloader = `List Jam Berangkat Bus
+
+Medali Mas : Mulai Dari Jam 14:30 Sampai 15:30
+Gunung Harta : Mulai Dari Jam 14:30 sampai 15:30
+Agra Mas : Mulai Dari Jam 11:30
+Pandawa87 : Mulai Dari Jam 15:30
+Keramat Jati : Mulai Dari Jam 15:30
+BandungExpress : Mulai Dari Jam Jam 15:00
+Angkasa Trans : Mulai Dari Jam Jam 13:00
+Setiawan : Mulai Dari Jam Jam 13:00
+RestuMulia : Mulai Dari Jam Jam 13:00
+Lorena : Mulai Dari Jam Jam 16:00`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'msearch': {
-sarch = `┌──⭓ *Search Menu*
-│
-│⭔ ${prefix}play [query]
-│⭔ ${prefix}yts [query]
-│⭔ ${prefix}google [query]
-│⭔ ${prefix}gimage [query]
-│⭔ ${prefix}pinterest [query]
-│⭔ ${prefix}wallpaper [query]
-│⭔ ${prefix}wikimedia [query]
-│⭔ ${prefix}ytsearch [query]
-│⭔ ${prefix}ringtone [query]
-│⭔ ${prefix}stalk [option] [query]
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
-            await zens.sendButtonText(m.chat, buttons, sarch, nyoutube, m, {quoted: fkontak})
+sarch = `Perlu Bantuan Silakan Click Tombol Di Bawah Ini`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mrandom': {
-rndom = `┌──⭓ *Random Menu*
-│
-│⭔ ${prefix}coffe
-│⭔ ${prefix}quotesanime
-│⭔ ${prefix}motivasi
-│⭔ ${prefix}dilanquote
-│⭔ ${prefix}bucinquote
-│⭔ ${prefix}katasenja
-│⭔ ${prefix}puisi
-│⭔ ${prefix}couple
-│⭔ ${prefix}anime
-│⭔ ${prefix}waifu
-│⭔ ${prefix}husbu
-│⭔ ${prefix}neko
-│⭔ ${prefix}shinobu
-│⭔ ${prefix}waifus (nsfw)
-│⭔ ${prefix}nekos (nsfw)
-│⭔ ${prefix}trap (nsfw)
-│⭔ ${prefix}blowjob (nsfw)
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
-            await zens.sendButtonText(m.chat, buttons, rndom, nyoutube, m, {quoted: fkontak})
+rndom = `Jika Ingin Memesan Tiket Secara Offline Silakan Click Link https://goo.gl/maps/MdiW8H9kEsLHqGSv6`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mtextpro': {
-txtpro = `┌──⭓ *Text Pro Menu*
-│
-│⭔ ${prefix}3dchristmas
-│⭔ ${prefix}3ddeepsea
-│⭔ ${prefix}americanflag
-│⭔ ${prefix}3dscifi
-│⭔ ${prefix}3drainbow
-│⭔ ${prefix}3dwaterpipe
-│⭔ ${prefix}halloweenskeleton
-│⭔ ${prefix}sketch
-│⭔ ${prefix}bluecircuit
-│⭔ ${prefix}space
-│⭔ ${prefix}metallic
-│⭔ ${prefix}fiction
-│⭔ ${prefix}greenhorror
-│⭔ ${prefix}transformer
-│⭔ ${prefix}berry
-│⭔ ${prefix}thunder
-│⭔ ${prefix}magma
-│⭔ ${prefix}3dcrackedstone
-│⭔ ${prefix}3dneonlight
-│⭔ ${prefix}impressiveglitch
-│⭔ ${prefix}naturalleaves
-│⭔ ${prefix}fireworksparkle
-│⭔ ${prefix}matrix
-│⭔ ${prefix}dropwater
-│⭔ ${prefix}harrypotter
-│⭔ ${prefix}foggywindow
-│⭔ ${prefix}neondevils
-│⭔ ${prefix}christmasholiday
-│⭔ ${prefix}3dgradient
-│⭔ ${prefix}blackpink
-│⭔ ${prefix}gluetext
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+txtpro = `+--? *Text Pro Menu*
+¦
+¦? ${prefix}3dchristmas
+¦? ${prefix}3ddeepsea
+¦? ${prefix}americanflag
+¦? ${prefix}3dscifi
+¦? ${prefix}3drainbow
+¦? ${prefix}3dwaterpipe
+¦? ${prefix}halloweenskeleton
+¦? ${prefix}sketch
+¦? ${prefix}bluecircuit
+¦? ${prefix}space
+¦? ${prefix}metallic
+¦? ${prefix}fiction
+¦? ${prefix}greenhorror
+¦? ${prefix}transformer
+¦? ${prefix}berry
+¦? ${prefix}thunder
+¦? ${prefix}magma
+¦? ${prefix}3dcrackedstone
+¦? ${prefix}3dneonlight
+¦? ${prefix}impressiveglitch
+¦? ${prefix}naturalleaves
+¦? ${prefix}fireworksparkle
+¦? ${prefix}matrix
+¦? ${prefix}dropwater
+¦? ${prefix}harrypotter
+¦? ${prefix}foggywindow
+¦? ${prefix}neondevils
+¦? ${prefix}christmasholiday
+¦? ${prefix}3dgradient
+¦? ${prefix}blackpink
+¦? ${prefix}gluetext
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, txtpro, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mphotooxy': {
-potooxy = `┌──⭓ *Photo Oxy Menu*
-│
-│⭔ ${prefix}shadow
-│⭔ ${prefix}romantic
-│⭔ ${prefix}smoke
-│⭔ ${prefix}burnpapper
-│⭔ ${prefix}naruto
-│⭔ ${prefix}lovemsg
-│⭔ ${prefix}grassmsg
-│⭔ ${prefix}lovetext
-│⭔ ${prefix}coffecup
-│⭔ ${prefix}butterfly
-│⭔ ${prefix}harrypotter
-│⭔ ${prefix}retrolol
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+potooxy = `+--? *Photo Oxy Menu*
+¦
+¦? ${prefix}shadow
+¦? ${prefix}romantic
+¦? ${prefix}smoke
+¦? ${prefix}burnpapper
+¦? ${prefix}naruto
+¦? ${prefix}lovemsg
+¦? ${prefix}grassmsg
+¦? ${prefix}lovetext
+¦? ${prefix}coffecup
+¦? ${prefix}butterfly
+¦? ${prefix}harrypotter
+¦? ${prefix}retrolol
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, potooxy, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mephoto': {
-ehoto = `┌──⭓ *Ephoto Menu*
-│
-│⭔ ${prefix}ffcover
-│⭔ ${prefix}crossfire
-│⭔ ${prefix}galaxy
-│⭔ ${prefix}glass
-│⭔ ${prefix}neon
-│⭔ ${prefix}beach
-│⭔ ${prefix}blackpink
-│⭔ ${prefix}igcertificate
-│⭔ ${prefix}ytcertificate
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+ehoto = `+--? *Ephoto Menu*
+¦
+¦? ${prefix}ffcover
+¦? ${prefix}crossfire
+¦? ${prefix}galaxy
+¦? ${prefix}glass
+¦? ${prefix}neon
+¦? ${prefix}beach
+¦? ${prefix}blackpink
+¦? ${prefix}igcertificate
+¦? ${prefix}ytcertificate
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, ehoto, nyoutube, m, {quoted: fkontak})
             }
             break
            case 'mfun': {
-mun = `┌──⭓ *Fun Menu*
-│
-│⭔ ${prefix}simih
-│⭔ ${prefix}halah
-│⭔ ${prefix}hilih
-│⭔ ${prefix}huluh
-│⭔ ${prefix}heleh
-│⭔ ${prefix}holoh
-│⭔ ${prefix}jadian
-│⭔ ${prefix}jodohku
-│⭔ ${prefix}apakah
-│⭔ ${prefix}bisakah
-│⭔ ${prefix}kapan
-│⭔ ${prefix}slot
-│⭔ ${prefix}delttt
-│⭔ ${prefix}tictactoe
-│⭔ ${prefix}family100
-│⭔ ${prefix}tebak [option]
-│⭔ ${prefix}math [mode]
-│⭔ ${prefix}suitpvp [@tag]
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+mun = `+--? *Fun Menu*
+¦
+¦? ${prefix}simih
+¦? ${prefix}halah
+¦? ${prefix}hilih
+¦? ${prefix}huluh
+¦? ${prefix}heleh
+¦? ${prefix}holoh
+¦? ${prefix}jadian
+¦? ${prefix}jodohku
+¦? ${prefix}apakah
+¦? ${prefix}bisakah
+¦? ${prefix}kapan
+¦? ${prefix}slot
+¦? ${prefix}delttt
+¦? ${prefix}tictactoe
+¦? ${prefix}family100
+¦? ${prefix}tebak [option]
+¦? ${prefix}math [mode]
+¦? ${prefix}suitpvp [@tag]
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, mun, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mprimbon': {
-pimbon = `┌──⭓ *Primbon Menu*
-│
-│⭔ ${prefix}nomorhoki
-│⭔ ${prefix}artimimpi
-│⭔ ${prefix}artinama
-│⭔ ${prefix}ramaljodoh
-│⭔ ${prefix}ramaljodohbali
-│⭔ ${prefix}suamiistri
-│⭔ ${prefix}ramalcinta
-│⭔ ${prefix}cocoknama
-│⭔ ${prefix}pasangan
-│⭔ ${prefix}jadiannikah
-│⭔ ${prefix}sifatusaha
-│⭔ ${prefix}rezeki
-│⭔ ${prefix}pekerjaan
-│⭔ ${prefix}nasib
-│⭔ ${prefix}penyakit
-│⭔ ${prefix}tarot
-│⭔ ${prefix}fengshui
-│⭔ ${prefix}haribaik
-│⭔ ${prefix}harisangar
-│⭔ ${prefix}harisial
-│⭔ ${prefix}nagahari
-│⭔ ${prefix}arahrezeki
-│⭔ ${prefix}peruntungan
-│⭔ ${prefix}weton
-│⭔ ${prefix}karakter
-│⭔ ${prefix}keberuntungan
-│⭔ ${prefix}memancing
-│⭔ ${prefix}masasubur
-│⭔ ${prefix}zodiak
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+pimbon = `+--? *Primbon Menu*
+¦
+¦? ${prefix}nomorhoki
+¦? ${prefix}artimimpi
+¦? ${prefix}artinama
+¦? ${prefix}ramaljodoh
+¦? ${prefix}ramaljodohbali
+¦? ${prefix}suamiistri
+¦? ${prefix}ramalcinta
+¦? ${prefix}cocoknama
+¦? ${prefix}pasangan
+¦? ${prefix}jadiannikah
+¦? ${prefix}sifatusaha
+¦? ${prefix}rezeki
+¦? ${prefix}pekerjaan
+¦? ${prefix}nasib
+¦? ${prefix}penyakit
+¦? ${prefix}tarot
+¦? ${prefix}fengshui
+¦? ${prefix}haribaik
+¦? ${prefix}harisangar
+¦? ${prefix}harisial
+¦? ${prefix}nagahari
+¦? ${prefix}arahrezeki
+¦? ${prefix}peruntungan
+¦? ${prefix}weton
+¦? ${prefix}karakter
+¦? ${prefix}keberuntungan
+¦? ${prefix}memancing
+¦? ${prefix}masasubur
+¦? ${prefix}zodiak
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, pimbon, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mconvert': {
-cnvert = `┌──⭓ *Convert Menu*
-│
-│⭔ ${prefix}attp
-│⭔ ${prefix}ttp
-│⭔ ${prefix}toimage
-│⭔ ${prefix}removebg
-│⭔ ${prefix}sticker
-│⭔ ${prefix}emojimix
-│⭔ ${prefix}emojimix2
-│⭔ ${prefix}tovideo
-│⭔ ${prefix}togif
-│⭔ ${prefix}tourl
-│⭔ ${prefix}tovn
-│⭔ ${prefix}tomp3
-│⭔ ${prefix}toaudio
-│⭔ ${prefix}ebinary
-│⭔ ${prefix}dbinary
-│⭔ ${prefix}styletext
-│⭔ ${prefix}smeme
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+cnvert = `+--? *Convert Menu*
+¦
+¦? ${prefix}attp
+¦? ${prefix}ttp
+¦? ${prefix}toimage
+¦? ${prefix}removebg
+¦? ${prefix}sticker
+¦? ${prefix}emojimix
+¦? ${prefix}emojimix2
+¦? ${prefix}tovideo
+¦? ${prefix}togif
+¦? ${prefix}tourl
+¦? ${prefix}tovn
+¦? ${prefix}tomp3
+¦? ${prefix}toaudio
+¦? ${prefix}ebinary
+¦? ${prefix}dbinary
+¦? ${prefix}styletext
+¦? ${prefix}smeme
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, cnvert, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mmain': {
-min = `┌──⭓ *Main Menu*
-│
-│⭔ ${prefix}ping
-│⭔ ${prefix}owner
-│⭔ ${prefix}report
-│⭔ ${prefix}menu / ${prefix}help / ${prefix}?
-│⭔ ${prefix}delete
-│⭔ ${prefix}infochat
-│⭔ ${prefix}quoted
-│⭔ ${prefix}listpc
-│⭔ ${prefix}listgc
-│⭔ ${prefix}listonline
-│⭔ ${prefix}speedtest
-│⭔ ${prefix}=es
-│⭔ ${prefix}tinyurl
-│⭔ ${prefix}isgd
-│⭔ ${prefix}vurl
-│⭔ ${prefix}clp
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+min = `+--? *Main Menu*
+¦
+¦? ${prefix}ping
+¦? ${prefix}owner
+¦? ${prefix}report
+¦? ${prefix}menu / ${prefix}help / ${prefix}?
+¦? ${prefix}delete
+¦? ${prefix}infochat
+¦? ${prefix}quoted
+¦? ${prefix}listpc
+¦? ${prefix}listgc
+¦? ${prefix}listonline
+¦? ${prefix}speedtest
+¦? ${prefix}=es
+¦? ${prefix}tinyurl
+¦? ${prefix}isgd
+¦? ${prefix}vurl
+¦? ${prefix}clp
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, min, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mdatabase': {
-dtbase = `┌──⭓ *Database Menu*
-│
-│⭔ ${prefix}setcmd
-│⭔ ${prefix}listcmd
-│⭔ ${prefix}delcmd
-│⭔ ${prefix}lockcmd
-│⭔ ${prefix}addmsg
-│⭔ ${prefix}listmsg
-│⭔ ${prefix}getmsg
-│⭔ ${prefix}delmsg
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+dtbase = `+--? *Database Menu*
+¦
+¦? ${prefix}setcmd
+¦? ${prefix}listcmd
+¦? ${prefix}delcmd
+¦? ${prefix}lockcmd
+¦? ${prefix}addmsg
+¦? ${prefix}listmsg
+¦? ${prefix}getmsg
+¦? ${prefix}delmsg
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, dtbase, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'manonymous': {
-aonymous = `┌──⭓ *Anonymous Menu*
-│
-│⭔ ${prefix}anonymous
-│⭔ ${prefix}start
-│⭔ ${prefix}next
-│⭔ ${prefix}keluar
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+aonymous = `+--? *Anonymous Menu*
+¦
+¦? ${prefix}anonymous
+¦? ${prefix}start
+¦? ${prefix}next
+¦? ${prefix}keluar
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, aonymous, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mislamic': {
-islmic = `┌──⭓ *Islamic Menu*
-│
-│⭔ ${prefix}iqra
-│⭔ ${prefix}hadist
-│⭔ ${prefix}alquran
-│⭔ ${prefix}juzamma
-│⭔ ${prefix}tafsirsurah
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+islmic = `+--? *Islamic Menu*
+¦
+¦? ${prefix}iqra
+¦? ${prefix}hadist
+¦? ${prefix}alquran
+¦? ${prefix}juzamma
+¦? ${prefix}tafsirsurah
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, islmic, nyoutube, m, {quoted: fkontak})
             }
             break
 case 'mvoice': {
-vice = `┌──⭓ *Voice Changer*
-│
-│⭔ ${prefix}bass
-│⭔ ${prefix}blown
-│⭔ ${prefix}deep
-│⭔ ${prefix}earrape
-│⭔ ${prefix}fast
-│⭔ ${prefix}fat
-│⭔ ${prefix}nightcore
-│⭔ ${prefix}reverse
-│⭔ ${prefix}robot
-│⭔ ${prefix}slow
-│⭔ ${prefix}tupai
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+vice = `+--? *Voice Changer*
+¦
+¦? ${prefix}bass
+¦? ${prefix}blown
+¦? ${prefix}deep
+¦? ${prefix}earrape
+¦? ${prefix}fast
+¦? ${prefix}fat
+¦? ${prefix}nightcore
+¦? ${prefix}reverse
+¦? ${prefix}robot
+¦? ${prefix}slow
+¦? ${prefix}tupai
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, vice, nyoutube, m, {quoted: fkontak})
             }
             break
             case 'mowner': {
-oner = `┌──⭓ *Owner Menu*
-│
-│⭔ ${prefix}react [emoji]
-│⭔ ${prefix}chat [option]
-│⭔ ${prefix}join [link]
-│⭔ ${prefix}leave
-│⭔ ${prefix}block @user
-│⭔ ${prefix}unblock @user
-│⭔ ${prefix}bcgroup [text]
-│⭔ ${prefix}bcall [text]
-│⭔ ${prefix}setppbot [image]
-│⭔ ${prefix}setexif
-│⭔ ${prefix}setmenu [option]
-│
-└───────𖦹Ꜥꜥ`
-let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '⌕ List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 }]
+oner = `+--? *Owner Menu*
+¦
+¦? ${prefix}react [emoji]
+¦? ${prefix}chat [option]
+¦? ${prefix}join [link]
+¦? ${prefix}leave
+¦? ${prefix}block @user
+¦? ${prefix}unblock @user
+¦? ${prefix}bcgroup [text]
+¦? ${prefix}bcall [text]
+¦? ${prefix}setppbot [image]
+¦? ${prefix}setexif
+¦? ${prefix}setmenu [option]
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, oner, nyoutube, m, {quoted: fkontak})
             }
             break
@@ -3390,311 +3328,311 @@ let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '⬅️Back'
             let me = m.sender
             let ments = [ownernya, me, ini_mark]
                 anu = `*${ucapanWaktu}*\n*kak @${me.split('@')[0]}*\n*Powered*  : @${ini_mark.split('@')[0]}\n*Creator* : @${ownernya.split('@')[0]}
-┌──⭓ *Group Menu*
-│
-│⭔ ${prefix}linkgroup
-│⭔ ${prefix}ephemeral [option]
-│⭔ ${prefix}setppgc [image]
-│⭔ ${prefix}setname [text]
-│⭔ ${prefix}setdesc [text]
-│⭔ ${prefix}group [option]
-│⭔ ${prefix}editinfo [option]
-│⭔ ${prefix}add @user
-│⭔ ${prefix}kick @user
-│⭔ ${prefix}hidetag [text]
-│⭔ ${prefix}tagall [text]
-│⭔ ${prefix}antilink [on/off]
-│⭔ ${prefix}mute [on/off]
-│⭔ ${prefix}promote @user
-│⭔ ${prefix}demote @user
-│⭔ ${prefix}vote [text]
-│⭔ ${prefix}devote
-│⭔ ${prefix}upvote
-│⭔ ${prefix}cekvote
-│⭔ ${prefix}hapusvote
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Webzone Menu*
-│
-│⭔ ${prefix}playstore
-│⭔ ${prefix}gsmarena
-│⭔ ${prefix}jadwalbioskop
-│⭔ ${prefix}nowplayingbioskop
-│⭔ ${prefix}aminio
-│⭔ ${prefix}wattpad
-│⭔ ${prefix}webtoons
-│⭔ ${prefix}drakor
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Downloader Menu*
-│
-│⭔ ${prefix}tiktoknowm [url]
-│⭔ ${prefix}tiktokwm [url]
-│⭔ ${prefix}tiktokmp3 [url]
-│⭔ ${prefix}instagram [url]
-│⭔ ${prefix}twitter [url]
-│⭔ ${prefix}twittermp3 [url]
-│⭔ ${prefix}facebook [url]
-│⭔ ${prefix}pinterestdl [url]
-│⭔ ${prefix}ytmp3 [url]
-│⭔ ${prefix}ytmp4 [url]
-│⭔ ${prefix}getmusic [query]
-│⭔ ${prefix}getvideo [query]
-│⭔ ${prefix}umma [url]
-│⭔ ${prefix}joox [query]
-│⭔ ${prefix}soundcloud [url]
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Search Menu*
-│
-│⭔ ${prefix}play [query]
-│⭔ ${prefix}yts [query]
-│⭔ ${prefix}google [query]
-│⭔ ${prefix}gimage [query]
-│⭔ ${prefix}pinterest [query]
-│⭔ ${prefix}wallpaper [query]
-│⭔ ${prefix}wikimedia [query]
-│⭔ ${prefix}ytsearch [query]
-│⭔ ${prefix}ringtone [query]
-│⭔ ${prefix}stalk [option] [query]
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Random Menu*
-│
-│⭔ ${prefix}gbtku
-│⭔ ${prefix}coffe
-│⭔ ${prefix}quotesanime
-│⭔ ${prefix}motivasi
-│⭔ ${prefix}dilanquote
-│⭔ ${prefix}bucinquote
-│⭔ ${prefix}katasenja
-│⭔ ${prefix}puisi
-│⭔ ${prefix}couple
-│⭔ ${prefix}anime
-│⭔ ${prefix}waifu
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Text Pro Menu*
-│
-│⭔ ${prefix}3dchristmas
-│⭔ ${prefix}3ddeepsea
-│⭔ ${prefix}americanflag
-│⭔ ${prefix}3dscifi
-│⭔ ${prefix}3drainbow
-│⭔ ${prefix}3dwaterpipe
-│⭔ ${prefix}halloweenskeleton
-│⭔ ${prefix}sketch
-│⭔ ${prefix}bluecircuit
-│⭔ ${prefix}space
-│⭔ ${prefix}metallic
-│⭔ ${prefix}fiction
-│⭔ ${prefix}greenhorror
-│⭔ ${prefix}transformer
-│⭔ ${prefix}berry
-│⭔ ${prefix}thunder
-│⭔ ${prefix}magma
-│⭔ ${prefix}3dcrackedstone
-│⭔ ${prefix}3dneonlight
-│⭔ ${prefix}impressiveglitch
-│⭔ ${prefix}naturalleaves
-│⭔ ${prefix}fireworksparkle
-│⭔ ${prefix}matrix
-│⭔ ${prefix}dropwater
-│⭔ ${prefix}harrypotter
-│⭔ ${prefix}foggywindow
-│⭔ ${prefix}neondevils
-│⭔ ${prefix}christmasholiday
-│⭔ ${prefix}3dgradient
-│⭔ ${prefix}blackpink
-│⭔ ${prefix}gluetext
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Photo Oxy Menu*
-│
-│⭔ ${prefix}shadow
-│⭔ ${prefix}romantic
-│⭔ ${prefix}smoke
-│⭔ ${prefix}burnpapper
-│⭔ ${prefix}naruto
-│⭔ ${prefix}lovemsg
-│⭔ ${prefix}grassmsg
-│⭔ ${prefix}lovetext
-│⭔ ${prefix}coffecup
-│⭔ ${prefix}butterfly
-│⭔ ${prefix}harrypotter
-│⭔ ${prefix}retrolol
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Ephoto Menu*
-│
-│⭔ ${prefix}ffcover
-│⭔ ${prefix}crossfire
-│⭔ ${prefix}galaxy
-│⭔ ${prefix}glass
-│⭔ ${prefix}neon
-│⭔ ${prefix}beach
-│⭔ ${prefix}blackpink
-│⭔ ${prefix}igcertificate
-│⭔ ${prefix}ytcertificate
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Fun Menu*
-│
-│⭔ ${prefix}simih
-│⭔ ${prefix}halah
-│⭔ ${prefix}hilih
-│⭔ ${prefix}huluh
-│⭔ ${prefix}heleh
-│⭔ ${prefix}holoh
-│⭔ ${prefix}jadian
-│⭔ ${prefix}jodohku
-│⭔ ${prefix}apakah
-│⭔ ${prefix}bisakah
-│⭔ ${prefix}kapan
-│⭔ ${prefix}slot
-│⭔ ${prefix}delttt
-│⭔ ${prefix}tictactoe
-│⭔ ${prefix}family100
-│⭔ ${prefix}tebak [option]
-│⭔ ${prefix}math [mode]
-│⭔ ${prefix}suitpvp [@tag]
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Primbon Menu*
-│
-│⭔ ${prefix}nomorhoki
-│⭔ ${prefix}artimimpi
-│⭔ ${prefix}artinama
-│⭔ ${prefix}ramaljodoh
-│⭔ ${prefix}ramaljodohbali
-│⭔ ${prefix}suamiistri
-│⭔ ${prefix}ramalcinta
-│⭔ ${prefix}cocoknama
-│⭔ ${prefix}pasangan
-│⭔ ${prefix}jadiannikah
-│⭔ ${prefix}sifatusaha
-│⭔ ${prefix}rezeki
-│⭔ ${prefix}pekerjaan
-│⭔ ${prefix}nasib
-│⭔ ${prefix}penyakit
-│⭔ ${prefix}tarot
-│⭔ ${prefix}fengshui
-│⭔ ${prefix}haribaik
-│⭔ ${prefix}harisangar
-│⭔ ${prefix}harisial
-│⭔ ${prefix}nagahari
-│⭔ ${prefix}arahrezeki
-│⭔ ${prefix}peruntungan
-│⭔ ${prefix}weton
-│⭔ ${prefix}karakter
-│⭔ ${prefix}keberuntungan
-│⭔ ${prefix}memancing
-│⭔ ${prefix}masasubur
-│⭔ ${prefix}zodiak
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Convert Menu*
-│
-│⭔ ${prefix}attp
-│⭔ ${prefix}ttp
-│⭔ ${prefix}toimage
-│⭔ ${prefix}removebg
-│⭔ ${prefix}sticker
-│⭔ ${prefix}emojimix
-│⭔ ${prefix}emojimix2
-│⭔ ${prefix}tovideo
-│⭔ ${prefix}togif
-│⭔ ${prefix}tourl
-│⭔ ${prefix}tovn
-│⭔ ${prefix}tomp3
-│⭔ ${prefix}toaudio
-│⭔ ${prefix}ebinary
-│⭔ ${prefix}dbinary
-│⭔ ${prefix}styletext
-│⭔ ${prefix}smeme
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Main Menu*
-│
-│⭔ ${prefix}ping
-│⭔ ${prefix}owner
-│⭔ ${prefix}report
-│⭔ ${prefix}menu / ${prefix}help / ${prefix}?
-│⭔ ${prefix}delete
-│⭔ ${prefix}infochat
-│⭔ ${prefix}quoted
-│⭔ ${prefix}listpc
-│⭔ ${prefix}listgc
-│⭔ ${prefix}listonline
-│⭔ ${prefix}speedtest
-│⭔ ${prefix}menfes
-│⭔ ${prefix}tinyurl
-│⭔ ${prefix}isgd
-│⭔ ${prefix}vurl
-│⭔ ${prefix}clp
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Database Menu*
-│
-│⭔ ${prefix}setcmd
-│⭔ ${prefix}listcmd
-│⭔ ${prefix}delcmd
-│⭔ ${prefix}lockcmd
-│⭔ ${prefix}addmsg
-│⭔ ${prefix}listmsg
-│⭔ ${prefix}getmsg
-│⭔ ${prefix}delmsg
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Anonymous Menu*
-│
-│⭔ ${prefix}anonymous
-│⭔ ${prefix}start
-│⭔ ${prefix}next
-│⭔ ${prefix}keluar
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Islamic Menu*
-│
-│⭔ ${prefix}iqra
-│⭔ ${prefix}hadist
-│⭔ ${prefix}alquran
-│⭔ ${prefix}juzamma
-│⭔ ${prefix}tafsirsurah
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Voice Changer*
-│
-│⭔ ${prefix}bass
-│⭔ ${prefix}blown
-│⭔ ${prefix}deep
-│⭔ ${prefix}earrape
-│⭔ ${prefix}fast
-│⭔ ${prefix}fat
-│⭔ ${prefix}nightcore
-│⭔ ${prefix}reverse
-│⭔ ${prefix}robot
-│⭔ ${prefix}slow
-│⭔ ${prefix}tupai
-│
-└───────𖦹Ꜥꜥ
-┌──⭓ *Owner Menu*
-│
-│⭔ ${prefix}react [emoji]
-│⭔ ${prefix}chat [option]
-│⭔ ${prefix}join [link]
-│⭔ ${prefix}leave
-│⭔ ${prefix}block @user
-│⭔ ${prefix}unblock @user
-│⭔ ${prefix}bcgroup [text]
-│⭔ ${prefix}bcall [text]
-│⭔ ${prefix}setppbot [image]
-│⭔ ${prefix}setexif
-│⭔ ${prefix}setmenu [option]
-│
-└───────𖦹Ꜥꜥ
++--? *Group Menu*
+¦
+¦? ${prefix}linkgroup
+¦? ${prefix}ephemeral [option]
+¦? ${prefix}setppgc [image]
+¦? ${prefix}setname [text]
+¦? ${prefix}setdesc [text]
+¦? ${prefix}group [option]
+¦? ${prefix}editinfo [option]
+¦? ${prefix}add @user
+¦? ${prefix}kick @user
+¦? ${prefix}hidetag [text]
+¦? ${prefix}tagall [text]
+¦? ${prefix}antilink [on/off]
+¦? ${prefix}mute [on/off]
+¦? ${prefix}promote @user
+¦? ${prefix}demote @user
+¦? ${prefix}vote [text]
+¦? ${prefix}devote
+¦? ${prefix}upvote
+¦? ${prefix}cekvote
+¦? ${prefix}hapusvote
+¦
++-------????
++--? *Webzone Menu*
+¦
+¦? ${prefix}playstore
+¦? ${prefix}gsmarena
+¦? ${prefix}jadwalbioskop
+¦? ${prefix}nowplayingbioskop
+¦? ${prefix}aminio
+¦? ${prefix}wattpad
+¦? ${prefix}webtoons
+¦? ${prefix}drakor
+¦
++-------????
++--? *Downloader Menu*
+¦
+¦? ${prefix}tiktoknowm [url]
+¦? ${prefix}tiktokwm [url]
+¦? ${prefix}tiktokmp3 [url]
+¦? ${prefix}instagram [url]
+¦? ${prefix}twitter [url]
+¦? ${prefix}twittermp3 [url]
+¦? ${prefix}facebook [url]
+¦? ${prefix}pinterestdl [url]
+¦? ${prefix}ytmp3 [url]
+¦? ${prefix}ytmp4 [url]
+¦? ${prefix}getmusic [query]
+¦? ${prefix}getvideo [query]
+¦? ${prefix}umma [url]
+¦? ${prefix}joox [query]
+¦? ${prefix}soundcloud [url]
+¦
++-------????
++--? *Search Menu*
+¦
+¦? ${prefix}play [query]
+¦? ${prefix}yts [query]
+¦? ${prefix}google [query]
+¦? ${prefix}gimage [query]
+¦? ${prefix}pinterest [query]
+¦? ${prefix}wallpaper [query]
+¦? ${prefix}wikimedia [query]
+¦? ${prefix}ytsearch [query]
+¦? ${prefix}ringtone [query]
+¦? ${prefix}stalk [option] [query]
+¦
++-------????
++--? *Random Menu*
+¦
+¦? ${prefix}gbtku
+¦? ${prefix}coffe
+¦? ${prefix}quotesanime
+¦? ${prefix}motivasi
+¦? ${prefix}dilanquote
+¦? ${prefix}bucinquote
+¦? ${prefix}katasenja
+¦? ${prefix}puisi
+¦? ${prefix}couple
+¦? ${prefix}anime
+¦? ${prefix}waifu
+¦
++-------????
++--? *Text Pro Menu*
+¦
+¦? ${prefix}3dchristmas
+¦? ${prefix}3ddeepsea
+¦? ${prefix}americanflag
+¦? ${prefix}3dscifi
+¦? ${prefix}3drainbow
+¦? ${prefix}3dwaterpipe
+¦? ${prefix}halloweenskeleton
+¦? ${prefix}sketch
+¦? ${prefix}bluecircuit
+¦? ${prefix}space
+¦? ${prefix}metallic
+¦? ${prefix}fiction
+¦? ${prefix}greenhorror
+¦? ${prefix}transformer
+¦? ${prefix}berry
+¦? ${prefix}thunder
+¦? ${prefix}magma
+¦? ${prefix}3dcrackedstone
+¦? ${prefix}3dneonlight
+¦? ${prefix}impressiveglitch
+¦? ${prefix}naturalleaves
+¦? ${prefix}fireworksparkle
+¦? ${prefix}matrix
+¦? ${prefix}dropwater
+¦? ${prefix}harrypotter
+¦? ${prefix}foggywindow
+¦? ${prefix}neondevils
+¦? ${prefix}christmasholiday
+¦? ${prefix}3dgradient
+¦? ${prefix}blackpink
+¦? ${prefix}gluetext
+¦
++-------????
++--? *Photo Oxy Menu*
+¦
+¦? ${prefix}shadow
+¦? ${prefix}romantic
+¦? ${prefix}smoke
+¦? ${prefix}burnpapper
+¦? ${prefix}naruto
+¦? ${prefix}lovemsg
+¦? ${prefix}grassmsg
+¦? ${prefix}lovetext
+¦? ${prefix}coffecup
+¦? ${prefix}butterfly
+¦? ${prefix}harrypotter
+¦? ${prefix}retrolol
+¦
++-------????
++--? *Ephoto Menu*
+¦
+¦? ${prefix}ffcover
+¦? ${prefix}crossfire
+¦? ${prefix}galaxy
+¦? ${prefix}glass
+¦? ${prefix}neon
+¦? ${prefix}beach
+¦? ${prefix}blackpink
+¦? ${prefix}igcertificate
+¦? ${prefix}ytcertificate
+¦
++-------????
++--? *Fun Menu*
+¦
+¦? ${prefix}simih
+¦? ${prefix}halah
+¦? ${prefix}hilih
+¦? ${prefix}huluh
+¦? ${prefix}heleh
+¦? ${prefix}holoh
+¦? ${prefix}jadian
+¦? ${prefix}jodohku
+¦? ${prefix}apakah
+¦? ${prefix}bisakah
+¦? ${prefix}kapan
+¦? ${prefix}slot
+¦? ${prefix}delttt
+¦? ${prefix}tictactoe
+¦? ${prefix}family100
+¦? ${prefix}tebak [option]
+¦? ${prefix}math [mode]
+¦? ${prefix}suitpvp [@tag]
+¦
++-------????
++--? *Primbon Menu*
+¦
+¦? ${prefix}nomorhoki
+¦? ${prefix}artimimpi
+¦? ${prefix}artinama
+¦? ${prefix}ramaljodoh
+¦? ${prefix}ramaljodohbali
+¦? ${prefix}suamiistri
+¦? ${prefix}ramalcinta
+¦? ${prefix}cocoknama
+¦? ${prefix}pasangan
+¦? ${prefix}jadiannikah
+¦? ${prefix}sifatusaha
+¦? ${prefix}rezeki
+¦? ${prefix}pekerjaan
+¦? ${prefix}nasib
+¦? ${prefix}penyakit
+¦? ${prefix}tarot
+¦? ${prefix}fengshui
+¦? ${prefix}haribaik
+¦? ${prefix}harisangar
+¦? ${prefix}harisial
+¦? ${prefix}nagahari
+¦? ${prefix}arahrezeki
+¦? ${prefix}peruntungan
+¦? ${prefix}weton
+¦? ${prefix}karakter
+¦? ${prefix}keberuntungan
+¦? ${prefix}memancing
+¦? ${prefix}masasubur
+¦? ${prefix}zodiak
+¦
++-------????
++--? *Convert Menu*
+¦
+¦? ${prefix}attp
+¦? ${prefix}ttp
+¦? ${prefix}toimage
+¦? ${prefix}removebg
+¦? ${prefix}sticker
+¦? ${prefix}emojimix
+¦? ${prefix}emojimix2
+¦? ${prefix}tovideo
+¦? ${prefix}togif
+¦? ${prefix}tourl
+¦? ${prefix}tovn
+¦? ${prefix}tomp3
+¦? ${prefix}toaudio
+¦? ${prefix}ebinary
+¦? ${prefix}dbinary
+¦? ${prefix}styletext
+¦? ${prefix}smeme
+¦
++-------????
++--? *Main Menu*
+¦
+¦? ${prefix}ping
+¦? ${prefix}owner
+¦? ${prefix}report
+¦? ${prefix}menu / ${prefix}help / ${prefix}?
+¦? ${prefix}delete
+¦? ${prefix}infochat
+¦? ${prefix}quoted
+¦? ${prefix}listpc
+¦? ${prefix}listgc
+¦? ${prefix}listonline
+¦? ${prefix}speedtest
+¦? ${prefix}menfes
+¦? ${prefix}tinyurl
+¦? ${prefix}isgd
+¦? ${prefix}vurl
+¦? ${prefix}clp
+¦
++-------????
++--? *Database Menu*
+¦
+¦? ${prefix}setcmd
+¦? ${prefix}listcmd
+¦? ${prefix}delcmd
+¦? ${prefix}lockcmd
+¦? ${prefix}addmsg
+¦? ${prefix}listmsg
+¦? ${prefix}getmsg
+¦? ${prefix}delmsg
+¦
++-------????
++--? *Anonymous Menu*
+¦
+¦? ${prefix}anonymous
+¦? ${prefix}start
+¦? ${prefix}next
+¦? ${prefix}keluar
+¦
++-------????
++--? *Islamic Menu*
+¦
+¦? ${prefix}iqra
+¦? ${prefix}hadist
+¦? ${prefix}alquran
+¦? ${prefix}juzamma
+¦? ${prefix}tafsirsurah
+¦
++-------????
++--? *Voice Changer*
+¦
+¦? ${prefix}bass
+¦? ${prefix}blown
+¦? ${prefix}deep
+¦? ${prefix}earrape
+¦? ${prefix}fast
+¦? ${prefix}fat
+¦? ${prefix}nightcore
+¦? ${prefix}reverse
+¦? ${prefix}robot
+¦? ${prefix}slow
+¦? ${prefix}tupai
+¦
++-------????
++--? *Owner Menu*
+¦
+¦? ${prefix}react [emoji]
+¦? ${prefix}chat [option]
+¦? ${prefix}join [link]
+¦? ${prefix}leave
+¦? ${prefix}block @user
+¦? ${prefix}unblock @user
+¦? ${prefix}bcgroup [text]
+¦? ${prefix}bcall [text]
+¦? ${prefix}setppbot [image]
+¦? ${prefix}setexif
+¦? ${prefix}setmenu [option]
+¦
++-------????
 _Support kami_\n_Dengan Cara Berdonasi_`
-                let buttons = [{ buttonId: 'donasi', buttonText: { displayText: '⌕ Donasi' }, type: 1 },{ buttonId: 'rules', buttonText: { displayText: '⌕ Rules' }, type: 1 }]
+                let buttons = [{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 },{ buttonId: 'rules', buttonText: { displayText: '? Rules' }, type: 1 }]
             await zens.sendButtonText(m.chat, buttons, anu, nyoutube, m, {mentions: ments, quoted: fkontak})
             }
             break
