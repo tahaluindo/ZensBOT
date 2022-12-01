@@ -1,2013 +1,3903 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# Copyright 2012 Matt Martz
-# All Rights Reserved.
-#
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
-#
-#         http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
 
-import csv
-import datetime
-import errno
-import math
-import os
-import platform
-import re
-import signal
-import socket
-import sys
-import threading
-import timeit
-import xml.parsers.expat
-
-try:
-    import gzip
-    GZIP_BASE = gzip.GzipFile
-except ImportError:
-    gzip = None
-    GZIP_BASE = object
-
-__version__ = '2.1.4b1'
-
-
-class FakeShutdownEvent(object):
-    """Class to fake a threading.Event.isSet so that users of this module
-    are not required to register their own threading.Event()
-    """
-
-    @staticmethod
-    def isSet():
-        "Dummy method to always return false"""
-        return False
-
-    is_set = isSet
-
-
-# Some global variables we use
-DEBUG = False
-_GLOBAL_DEFAULT_TIMEOUT = object()
-PY25PLUS = sys.version_info[:2] >= (2, 5)
-PY26PLUS = sys.version_info[:2] >= (2, 6)
-PY32PLUS = sys.version_info[:2] >= (3, 2)
-PY310PLUS = sys.version_info[:2] >= (3, 10)
-
-# Begin import game to handle Python 2 and Python 3
-try:
-    import json
-except ImportError:
-    try:
-        import simplejson as json
-    except ImportError:
-        json = None
-
-try:
-    import xml.etree.ElementTree as ET
-    try:
-        from xml.etree.ElementTree import _Element as ET_Element
-    except ImportError:
-        pass
-except ImportError:
-    from xml.dom import minidom as DOM
-    from xml.parsers.expat import ExpatError
-    ET = None
-
-try:
-    from urllib2 import (urlopen, Request, HTTPError, URLError,
-                         AbstractHTTPHandler, ProxyHandler,
-                         HTTPDefaultErrorHandler, HTTPRedirectHandler,
-                         HTTPErrorProcessor, OpenerDirector)
-except ImportError:
-    from urllib.request import (urlopen, Request, HTTPError, URLError,
-                                AbstractHTTPHandler, ProxyHandler,
-                                HTTPDefaultErrorHandler, HTTPRedirectHandler,
-                                HTTPErrorProcessor, OpenerDirector)
-
-try:
-    from httplib import HTTPConnection, BadStatusLine
-except ImportError:
-    from http.client import HTTPConnection, BadStatusLine
-
-try:
-    from httplib import HTTPSConnection
-except ImportError:
-    try:
-        from http.client import HTTPSConnection
-    except ImportError:
-        HTTPSConnection = None
-
-try:
-    from httplib import FakeSocket
-except ImportError:
-    FakeSocket = None
-
-try:
-    from Queue import Queue
-except ImportError:
-    from queue import Queue
-
-try:
-    from urlparse import urlparse
-except ImportError:
-    from urllib.parse import urlparse
-
-try:
-    from urlparse import parse_qs
-except ImportError:
-    try:
-        from urllib.parse import parse_qs
-    except ImportError:
-        from cgi import parse_qs
-
-try:
-    from hashlib import md5
-except ImportError:
-    from md5 import md5
-
-try:
-    from argparse import ArgumentParser as ArgParser
-    from argparse import SUPPRESS as ARG_SUPPRESS
-    PARSER_TYPE_INT = int
-    PARSER_TYPE_STR = str
-    PARSER_TYPE_FLOAT = float
-except ImportError:
-    from optparse import OptionParser as ArgParser
-    from optparse import SUPPRESS_HELP as ARG_SUPPRESS
-    PARSER_TYPE_INT = 'int'
-    PARSER_TYPE_STR = 'string'
-    PARSER_TYPE_FLOAT = 'float'
-
-try:
-    from cStringIO import StringIO
-    BytesIO = None
-except ImportError:
-    try:
-        from StringIO import StringIO
-        BytesIO = None
-    except ImportError:
-        from io import StringIO, BytesIO
-
-try:
-    import __builtin__
-except ImportError:
-    import builtins
-    from io import TextIOWrapper, FileIO
-
-    class _Py3Utf8Output(TextIOWrapper):
-        """UTF-8 encoded wrapper around stdout for py3, to override
-        ASCII stdout
-        """
-        def __init__(self, f, **kwargs):
-            buf = FileIO(f.fileno(), 'w')
-            super(_Py3Utf8Output, self).__init__(
-                buf,
-                encoding='utf8',
-                errors='strict'
-            )
-
-        def write(self, s):
-            super(_Py3Utf8Output, self).write(s)
-            self.flush()
-
-    _py3_print = getattr(builtins, 'print')
-    try:
-        _py3_utf8_stdout = _Py3Utf8Output(sys.stdout)
-        _py3_utf8_stderr = _Py3Utf8Output(sys.stderr)
-    except OSError:
-        # sys.stdout/sys.stderr is not a compatible stdout/stderr object
-        # just use it and hope things go ok
-        _py3_utf8_stdout = sys.stdout
-        _py3_utf8_stderr = sys.stderr
-
-    def to_utf8(v):
-        """No-op encode to utf-8 for py3"""
-        return v
-
-    def print_(*args, **kwargs):
-        """Wrapper function for py3 to print, with a utf-8 encoded stdout"""
-        if kwargs.get('file') == sys.stderr:
-            kwargs['file'] = _py3_utf8_stderr
-        else:
-            kwargs['file'] = kwargs.get('file', _py3_utf8_stdout)
-        _py3_print(*args, **kwargs)
-else:
-    del __builtin__
-
-    def to_utf8(v):
-        """Encode value to utf-8 if possible for py2"""
-        try:
-            return v.encode('utf8', 'strict')
-        except AttributeError:
-            return v
-
-    def print_(*args, **kwargs):
-        """The new-style print function for Python 2.4 and 2.5.
-
-        Taken from https://pypi.python.org/pypi/six/
-
-        Modified to set encoding to UTF-8 always, and to flush after write
-        """
-        fp = kwargs.pop("file", sys.stdout)
-        if fp is None:
-            return
-
-        def write(data):
-            if not isinstance(data, basestring):
-                data = str(data)
-            # If the file has an encoding, encode unicode with it.
-            encoding = 'utf8'  # Always trust UTF-8 for output
-            if (isinstance(fp, file) and
-                    isinstance(data, unicode) and
-                    encoding is not None):
-                errors = getattr(fp, "errors", None)
-                if errors is None:
-                    errors = "strict"
-                data = data.encode(encoding, errors)
-            fp.write(data)
-            fp.flush()
-        want_unicode = False
-        sep = kwargs.pop("sep", None)
-        if sep is not None:
-            if isinstance(sep, unicode):
-                want_unicode = True
-            elif not isinstance(sep, str):
-                raise TypeError("sep must be None or a string")
-        end = kwargs.pop("end", None)
-        if end is not None:
-            if isinstance(end, unicode):
-                want_unicode = True
-            elif not isinstance(end, str):
-                raise TypeError("end must be None or a string")
-        if kwargs:
-            raise TypeError("invalid keyword arguments to print()")
-        if not want_unicode:
-            for arg in args:
-                if isinstance(arg, unicode):
-                    want_unicode = True
-                    break
-        if want_unicode:
-            newline = unicode("\n")
-            space = unicode(" ")
-        else:
-            newline = "\n"
-            space = " "
-        if sep is None:
-            sep = space
-        if end is None:
-            end = newline
-        for i, arg in enumerate(args):
-            if i:
-                write(sep)
-            write(arg)
-        write(end)
-
-# Exception "constants" to support Python 2 through Python 3
-try:
-    import ssl
-    try:
-        CERT_ERROR = (ssl.CertificateError,)
-    except AttributeError:
-        CERT_ERROR = tuple()
-
-    HTTP_ERRORS = (
-        (HTTPError, URLError, socket.error, ssl.SSLError, BadStatusLine) +
-        CERT_ERROR
-    )
-except ImportError:
-    ssl = None
-    HTTP_ERRORS = (HTTPError, URLError, socket.error, BadStatusLine)
-
-if PY32PLUS:
-    etree_iter = ET.Element.iter
-elif PY25PLUS:
-    etree_iter = ET_Element.getiterator
-
-if PY26PLUS:
-    thread_is_alive = threading.Thread.is_alive
-else:
-    thread_is_alive = threading.Thread.isAlive
-
-
-def event_is_set(event):
-    try:
-        return event.is_set()
-    except AttributeError:
-        return event.isSet()
-
-
-class SpeedtestException(Exception):
-    """Base exception for this module"""
-
-
-class SpeedtestCLIError(SpeedtestException):
-    """Generic exception for raising errors during CLI operation"""
-
-
-class SpeedtestHTTPError(SpeedtestException):
-    """Base HTTP exception for this module"""
-
-
-class SpeedtestConfigError(SpeedtestException):
-    """Configuration XML is invalid"""
-
-
-class SpeedtestServersError(SpeedtestException):
-    """Servers XML is invalid"""
-
-
-class ConfigRetrievalError(SpeedtestHTTPError):
-    """Could not retrieve config.php"""
-
-
-class ServersRetrievalError(SpeedtestHTTPError):
-    """Could not retrieve speedtest-servers.php"""
-
-
-class InvalidServerIDType(SpeedtestException):
-    """Server ID used for filtering was not an integer"""
-
-
-class NoMatchedServers(SpeedtestException):
-    """No servers matched when filtering"""
-
-
-class SpeedtestMiniConnectFailure(SpeedtestException):
-    """Could not connect to the provided speedtest mini server"""
-
-
-class InvalidSpeedtestMiniServer(SpeedtestException):
-    """Server provided as a speedtest mini server does not actually appear
-    to be a speedtest mini server
-    """
-
-
-class ShareResultsConnectFailure(SpeedtestException):
-    """Could not connect to speedtest.net API to POST results"""
-
-
-class ShareResultsSubmitFailure(SpeedtestException):
-    """Unable to successfully POST results to speedtest.net API after
-    connection
-    """
-
-
-class SpeedtestUploadTimeout(SpeedtestException):
-    """testlength configuration reached during upload
-    Used to ensure the upload halts when no additional data should be sent
-    """
-
-
-class SpeedtestBestServerFailure(SpeedtestException):
-    """Unable to determine best server"""
-
-
-class SpeedtestMissingBestServer(SpeedtestException):
-    """get_best_server not called or not able to determine best server"""
-
-
-def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT,
-                      source_address=None):
-    """Connect to *address* and return the socket object.
-
-    Convenience function.  Connect to *address* (a 2-tuple ``(host,
-    port)``) and return the socket object.  Passing the optional
-    *timeout* parameter will set the timeout on the socket instance
-    before attempting to connect.  If no *timeout* is supplied, the
-    global default timeout setting returned by :func:`getdefaulttimeout`
-    is used.  If *source_address* is set it must be a tuple of (host, port)
-    for the socket to bind as a source address before making the connection.
-    An host of '' or port 0 tells the OS to use the default.
-
-    Largely vendored from Python 2.7, modified to work with Python 2.4
-    """
-
-    host, port = address
-    err = None
-    for res in socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM):
-        af, socktype, proto, canonname, sa = res
-        sock = None
-        try:
-            sock = socket.socket(af, socktype, proto)
-            if timeout is not _GLOBAL_DEFAULT_TIMEOUT:
-                sock.settimeout(float(timeout))
-            if source_address:
-                sock.bind(source_address)
-            sock.connect(sa)
-            return sock
-
-        except socket.error:
-            err = get_exception()
-            if sock is not None:
-                sock.close()
-
-    if err is not None:
-        raise err
-    else:
-        raise socket.error("getaddrinfo returns an empty list")
-
-
-class SpeedtestHTTPConnection(HTTPConnection):
-    """Custom HTTPConnection to support source_address across
-    Python 2.4 - Python 3
-    """
-    def __init__(self, *args, **kwargs):
-        source_address = kwargs.pop('source_address', None)
-        timeout = kwargs.pop('timeout', 10)
-
-        self._tunnel_host = None
-
-        HTTPConnection.__init__(self, *args, **kwargs)
-
-        self.source_address = source_address
-        self.timeout = timeout
-
-    def connect(self):
-        """Connect to the host and port specified in __init__."""
-        try:
-            self.sock = socket.create_connection(
-                (self.host, self.port),
-                self.timeout,
-                self.source_address
-            )
-        except (AttributeError, TypeError):
-            self.sock = create_connection(
-                (self.host, self.port),
-                self.timeout,
-                self.source_address
-            )
-
-        if self._tunnel_host:
-            self._tunnel()
-
-
-if HTTPSConnection:
-    class SpeedtestHTTPSConnection(HTTPSConnection):
-        """Custom HTTPSConnection to support source_address across
-        Python 2.4 - Python 3
-        """
-        default_port = 443
-
-        def __init__(self, *args, **kwargs):
-            source_address = kwargs.pop('source_address', None)
-            timeout = kwargs.pop('timeout', 10)
-
-            self._tunnel_host = None
-
-            HTTPSConnection.__init__(self, *args, **kwargs)
-
-            self.timeout = timeout
-            self.source_address = source_address
-
-        def connect(self):
-            "Connect to a host on a given (SSL) port."
-            try:
-                self.sock = socket.create_connection(
-                    (self.host, self.port),
-                    self.timeout,
-                    self.source_address
-                )
-            except (AttributeError, TypeError):
-                self.sock = create_connection(
-                    (self.host, self.port),
-                    self.timeout,
-                    self.source_address
-                )
-
-            if self._tunnel_host:
-                self._tunnel()
-
-            if ssl:
-                try:
-                    kwargs = {}
-                    if hasattr(ssl, 'SSLContext'):
-                        if self._tunnel_host:
-                            kwargs['server_hostname'] = self._tunnel_host
-                        else:
-                            kwargs['server_hostname'] = self.host
-                    self.sock = self._context.wrap_socket(self.sock, **kwargs)
-                except AttributeError:
-                    self.sock = ssl.wrap_socket(self.sock)
-                    try:
-                        self.sock.server_hostname = self.host
-                    except AttributeError:
-                        pass
-            elif FakeSocket:
-                # Python 2.4/2.5 support
-                try:
-                    self.sock = FakeSocket(self.sock, socket.ssl(self.sock))
-                except AttributeError:
-                    raise SpeedtestException(
-                        'This version of Python does not support HTTPS/SSL '
-                        'functionality'
-                    )
-            else:
-                raise SpeedtestException(
-                    'This version of Python does not support HTTPS/SSL '
-                    'functionality'
-                )
-
-
-def _build_connection(connection, source_address, timeout, context=None):
-    """Cross Python 2.4 - Python 3 callable to build an ``HTTPConnection`` or
-    ``HTTPSConnection`` with the args we need
-
-    Called from ``http(s)_open`` methods of ``SpeedtestHTTPHandler`` or
-    ``SpeedtestHTTPSHandler``
-    """
-    def inner(host, **kwargs):
-        kwargs.update({
-            'source_address': source_address,
-            'timeout': timeout
-        })
-        if context:
-            kwargs['context'] = context
-        return connection(host, **kwargs)
-    return inner
-
-
-class SpeedtestHTTPHandler(AbstractHTTPHandler):
-    """Custom ``HTTPHandler`` that can build a ``HTTPConnection`` with the
-    args we need for ``source_address`` and ``timeout``
-    """
-    def __init__(self, debuglevel=0, source_address=None, timeout=10):
-        AbstractHTTPHandler.__init__(self, debuglevel)
-        self.source_address = source_address
-        self.timeout = timeout
-
-    def http_open(self, req):
-        return self.do_open(
-            _build_connection(
-                SpeedtestHTTPConnection,
-                self.source_address,
-                self.timeout
-            ),
-            req
-        )
-
-    http_request = AbstractHTTPHandler.do_request_
-
-
-class SpeedtestHTTPSHandler(AbstractHTTPHandler):
-    """Custom ``HTTPSHandler`` that can build a ``HTTPSConnection`` with the
-    args we need for ``source_address`` and ``timeout``
-    """
-    def __init__(self, debuglevel=0, context=None, source_address=None,
-                 timeout=10):
-        AbstractHTTPHandler.__init__(self, debuglevel)
-        self._context = context
-        self.source_address = source_address
-        self.timeout = timeout
-
-    def https_open(self, req):
-        return self.do_open(
-            _build_connection(
-                SpeedtestHTTPSConnection,
-                self.source_address,
-                self.timeout,
-                context=self._context,
-            ),
-            req
-        )
-
-    https_request = AbstractHTTPHandler.do_request_
-
-
-def build_opener(source_address=None, timeout=10):
-    """Function similar to ``urllib2.build_opener`` that will build
-    an ``OpenerDirector`` with the explicit handlers we want,
-    ``source_address`` for binding, ``timeout`` and our custom
-    `User-Agent`
-    """
-
-    printer('Timeout set to %d' % timeout, debug=True)
-
-    if source_address:
-        source_address_tuple = (source_address, 0)
-        printer('Binding to source address: %r' % (source_address_tuple,),
-                debug=True)
-    else:
-        source_address_tuple = None
-
-    handlers = [
-        ProxyHandler(),
-        SpeedtestHTTPHandler(source_address=source_address_tuple,
-                             timeout=timeout),
-        SpeedtestHTTPSHandler(source_address=source_address_tuple,
-                              timeout=timeout),
-        HTTPDefaultErrorHandler(),
-        HTTPRedirectHandler(),
-        HTTPErrorProcessor()
-    ]
-
-    opener = OpenerDirector()
-    opener.addheaders = [('User-agent', build_user_agent())]
-
-    for handler in handlers:
-        opener.add_handler(handler)
-
-    return opener
-
-
-class GzipDecodedResponse(GZIP_BASE):
-    """A file-like object to decode a response encoded with the gzip
-    method, as described in RFC 1952.
-
-    Largely copied from ``xmlrpclib``/``xmlrpc.client`` and modified
-    to work for py2.4-py3
-    """
-    def __init__(self, response):
-        # response doesn't support tell() and read(), required by
-        # GzipFile
-        if not gzip:
-            raise SpeedtestHTTPError('HTTP response body is gzip encoded, '
-                                     'but gzip support is not available')
-        IO = BytesIO or StringIO
-        self.io = IO()
-        while 1:
-            chunk = response.read(1024)
-            if len(chunk) == 0:
-                break
-            self.io.write(chunk)
-        self.io.seek(0)
-        gzip.GzipFile.__init__(self, mode='rb', fileobj=self.io)
-
-    def close(self):
-        try:
-            gzip.GzipFile.close(self)
-        finally:
-            self.io.close()
-
-
-def get_exception():
-    """Helper function to work with py2.4-py3 for getting the current
-    exception in a try/except block
-    """
-    return sys.exc_info()[1]
-
-
-def distance(origin, destination):
-    """Determine distance between 2 sets of [lat,lon] in km"""
-
-    lat1, lon1 = origin
-    lat2, lon2 = destination
-    radius = 6371  # km
-
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) * math.sin(dlat / 2) +
-         math.cos(math.radians(lat1)) *
-         math.cos(math.radians(lat2)) * math.sin(dlon / 2) *
-         math.sin(dlon / 2))
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    d = radius * c
-
-    return d
-
-
-def build_user_agent():
-    """Build a Mozilla/5.0 compatible User-Agent string"""
-
-    ua_tuple = (
-        'Mozilla/5.0',
-        '(%s; U; %s; en-us)' % (platform.platform(),
-                                platform.architecture()[0]),
-        'Python/%s' % platform.python_version(),
-        '(KHTML, like Gecko)',
-        'speedtest-cli/%s' % __version__
-    )
-    user_agent = ' '.join(ua_tuple)
-    printer('User-Agent: %s' % user_agent, debug=True)
-    return user_agent
-
-
-def build_request(url, data=None, headers=None, bump='0', secure=False):
-    """Build a urllib2 request object
-
-    This function automatically adds a User-Agent header to all requests
-
-    """
-
-    if not headers:
-        headers = {}
-
-    if url[0] == ':':
-        scheme = ('http', 'https')[bool(secure)]
-        schemed_url = '%s%s' % (scheme, url)
-    else:
-        schemed_url = url
-
-    if '?' in url:
-        delim = '&'
-    else:
-        delim = '?'
-
-    # WHO YOU GONNA CALL? CACHE BUSTERS!
-    final_url = '%s%sx=%s.%s' % (schemed_url, delim,
-                                 int(timeit.time.time() * 1000),
-                                 bump)
-
-    headers.update({
-        'Cache-Control': 'no-cache',
-    })
-
-    printer('%s %s' % (('GET', 'POST')[bool(data)], final_url),
-            debug=True)
-
-    return Request(final_url, data=data, headers=headers)
-
-
-def catch_request(request, opener=None):
-    """Helper function to catch common exceptions encountered when
-    establishing a connection with a HTTP/HTTPS request
-
-    """
-
-    if opener:
-        _open = opener.open
-    else:
-        _open = urlopen
-
-    try:
-        uh = _open(request)
-        if request.get_full_url() != uh.geturl():
-            printer('Redirected to %s' % uh.geturl(), debug=True)
-        return uh, False
-    except HTTP_ERRORS:
-        e = get_exception()
-        return None, e
-
-
-def get_response_stream(response):
-    """Helper function to return either a Gzip reader if
-    ``Content-Encoding`` is ``gzip`` otherwise the response itself
-
-    """
-
-    try:
-        getheader = response.headers.getheader
-    except AttributeError:
-        getheader = response.getheader
-
-    if getheader('content-encoding') == 'gzip':
-        return GzipDecodedResponse(response)
-
-    return response
-
-
-def get_attributes_by_tag_name(dom, tag_name):
-    """Retrieve an attribute from an XML document and return it in a
-    consistent format
-
-    Only used with xml.dom.minidom, which is likely only to be used
-    with python versions older than 2.5
-    """
-    elem = dom.getElementsByTagName(tag_name)[0]
-    return dict(list(elem.attributes.items()))
-
-
-def print_dots(shutdown_event):
-    """Built in callback function used by Thread classes for printing
-    status
-    """
-    def inner(current, total, start=False, end=False):
-        if event_is_set(shutdown_event):
-            return
-
-        sys.stdout.write('.')
-        if current + 1 == total and end is True:
-            sys.stdout.write('\n')
-        sys.stdout.flush()
-    return inner
-
-
-def do_nothing(*args, **kwargs):
-    pass
-
-
-class HTTPDownloader(threading.Thread):
-    """Thread class for retrieving a URL"""
-
-    def __init__(self, i, request, start, timeout, opener=None,
-                 shutdown_event=None):
-        threading.Thread.__init__(self)
-        self.request = request
-        self.result = [0]
-        self.starttime = start
-        self.timeout = timeout
-        self.i = i
-        if opener:
-            self._opener = opener.open
-        else:
-            self._opener = urlopen
-
-        if shutdown_event:
-            self._shutdown_event = shutdown_event
-        else:
-            self._shutdown_event = FakeShutdownEvent()
-
-    def run(self):
-        try:
-            if (timeit.default_timer() - self.starttime) <= self.timeout:
-                f = self._opener(self.request)
-                while (not event_is_set(self._shutdown_event) and
-                        (timeit.default_timer() - self.starttime) <=
-                        self.timeout):
-                    self.result.append(len(f.read(10240)))
-                    if self.result[-1] == 0:
-                        break
-                f.close()
-        except IOError:
-            pass
-        except HTTP_ERRORS:
-            pass
-
-
-class HTTPUploaderData(object):
-    """File like object to improve cutting off the upload once the timeout
-    has been reached
-    """
-
-    def __init__(self, length, start, timeout, shutdown_event=None):
-        self.length = length
-        self.start = start
-        self.timeout = timeout
-
-        if shutdown_event:
-            self._shutdown_event = shutdown_event
-        else:
-            self._shutdown_event = FakeShutdownEvent()
-
-        self._data = None
-
-        self.total = [0]
-
-    def pre_allocate(self):
-        chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        multiplier = int(round(int(self.length) / 36.0))
-        IO = BytesIO or StringIO
-        try:
-            self._data = IO(
-                ('content1=%s' %
-                 (chars * multiplier)[0:int(self.length) - 9]
-                 ).encode()
-            )
-        except MemoryError:
-            raise SpeedtestCLIError(
-                'Insufficient memory to pre-allocate upload data. Please '
-                'use --no-pre-allocate'
-            )
-
-    @property
-    def data(self):
-        if not self._data:
-            self.pre_allocate()
-        return self._data
-
-    def read(self, n=10240):
-        if ((timeit.default_timer() - self.start) <= self.timeout and
-                not event_is_set(self._shutdown_event)):
-            chunk = self.data.read(n)
-            self.total.append(len(chunk))
-            return chunk
-        else:
-            raise SpeedtestUploadTimeout()
-
-    def __len__(self):
-        return self.length
-
-
-class HTTPUploader(threading.Thread):
-    """Thread class for putting a URL"""
-
-    def __init__(self, i, request, start, size, timeout, opener=None,
-                 shutdown_event=None):
-        threading.Thread.__init__(self)
-        self.request = request
-        self.request.data.start = self.starttime = start
-        self.size = size
-        self.result = 0
-        self.timeout = timeout
-        self.i = i
-
-        if opener:
-            self._opener = opener.open
-        else:
-            self._opener = urlopen
-
-        if shutdown_event:
-            self._shutdown_event = shutdown_event
-        else:
-            self._shutdown_event = FakeShutdownEvent()
-
-    def run(self):
-        request = self.request
-        try:
-            if ((timeit.default_timer() - self.starttime) <= self.timeout and
-                    not event_is_set(self._shutdown_event)):
-                try:
-                    f = self._opener(request)
-                except TypeError:
-                    # PY24 expects a string or buffer
-                    # This also causes issues with Ctrl-C, but we will concede
-                    # for the moment that Ctrl-C on PY24 isn't immediate
-                    request = build_request(self.request.get_full_url(),
-                                            data=request.data.read(self.size))
-                    f = self._opener(request)
-                f.read(11)
-                f.close()
-                self.result = sum(self.request.data.total)
-            else:
-                self.result = 0
-        except (IOError, SpeedtestUploadTimeout):
-            self.result = sum(self.request.data.total)
-        except HTTP_ERRORS:
-            self.result = 0
-
-
-class SpeedtestResults(object):
-    """Class for holding the results of a speedtest, including:
-
-    Download speed
-    Upload speed
-    Ping/Latency to test server
-    Data about server that the test was run against
-
-    Additionally this class can return a result data as a dictionary or CSV,
-    as well as submit a POST of the result data to the speedtest.net API
-    to get a share results image link.
-    """
-
-    def __init__(self, download=0, upload=0, ping=0, server=None, client=None,
-                 opener=None, secure=False):
-        self.download = download
-        self.upload = upload
-        self.ping = ping
-        if server is None:
-            self.server = {}
-        else:
-            self.server = server
-        self.client = client or {}
-
-        self._share = None
-        self.timestamp = '%sZ' % datetime.datetime.utcnow().isoformat()
-        self.bytes_received = 0
-        self.bytes_sent = 0
-
-        if opener:
-            self._opener = opener
-        else:
-            self._opener = build_opener()
-
-        self._secure = secure
-
-    def __repr__(self):
-        return repr(self.dict())
-
-    def share(self):
-        """POST data to the speedtest.net API to obtain a share results
-        link
-        """
-
-        if self._share:
-            return self._share
-
-        download = int(round(self.download / 1000.0, 0))
-        ping = int(round(self.ping, 0))
-        upload = int(round(self.upload / 1000.0, 0))
-
-        # Build the request to send results back to speedtest.net
-        # We use a list instead of a dict because the API expects parameters
-        # in a certain order
-        api_data = [
-            'recommendedserverid=%s' % self.server['id'],
-            'ping=%s' % ping,
-            'screenresolution=',
-            'promo=',
-            'download=%s' % download,
-            'screendpi=',
-            'upload=%s' % upload,
-            'testmethod=http',
-            'hash=%s' % md5(('%s-%s-%s-%s' %
-                             (ping, upload, download, '297aae72'))
-                            .encode()).hexdigest(),
-            'touchscreen=none',
-            'startmode=pingselect',
-            'accuracy=1',
-            'bytesreceived=%s' % self.bytes_received,
-            'bytessent=%s' % self.bytes_sent,
-            'serverid=%s' % self.server['id'],
-        ]
-
-        headers = {'Referer': 'http://c.speedtest.net/flash/speedtest.swf'}
-        request = build_request('://www.speedtest.net/api/api.php',
-                                data='&'.join(api_data).encode(),
-                                headers=headers, secure=self._secure)
-        f, e = catch_request(request, opener=self._opener)
-        if e:
-            raise ShareResultsConnectFailure(e)
-
-        response = f.read()
-        code = f.code
-        f.close()
-
-        if int(code) != 200:
-            raise ShareResultsSubmitFailure('Could not submit results to '
-                                            'speedtest.net')
-
-        qsargs = parse_qs(response.decode())
-        resultid = qsargs.get('resultid')
-        if not resultid or len(resultid) != 1:
-            raise ShareResultsSubmitFailure('Could not submit results to '
-                                            'speedtest.net')
-
-        self._share = 'http://www.speedtest.net/result/%s.png' % resultid[0]
-
-        return self._share
-
-    def dict(self):
-        """Return dictionary of result data"""
-
-        return {
-            'download': self.download,
-            'upload': self.upload,
-            'ping': self.ping,
-            'server': self.server,
-            'timestamp': self.timestamp,
-            'bytes_sent': self.bytes_sent,
-            'bytes_received': self.bytes_received,
-            'share': self._share,
-            'client': self.client,
+require('./config')
+const { BufferJSON, WA_DEFAULT_EPHEMERAL, generateWAMessageFromContent, proto, generateWAMessageContent, generateWAMessage, prepareWAMessageMedia, areJidsSameUser, getContentType } = require('@adiwajshing/baileys')
+const fs = require('fs')
+const os = require('os')
+const util = require('util')
+const path = require('path')
+const hx = require('hxz-api')
+const axios = require('axios')
+const chalk = require('chalk')
+const yts = require('yt-search')
+const xfar = require('xfarr-api')
+const google = require('google-it')
+const { exec, spawn, execSync } = require("child_process")
+const moment = require('moment-timezone')
+const { JSDOM } = require('jsdom')
+const speed = require('performance-now')
+const { performance } = require('perf_hooks')
+const { Primbon } = require('scrape-primbon')
+const primbon = new Primbon()
+const { smsg, formatp, tanggal, formatDate, getTime, isUrl, sleep, clockString, runtime, fetchJson, getBuffer, jsonformat, format, parseMention, getRandom, getGroupAdmins } = require('./lib/myfunc')
+
+const hariini = moment.tz('Asia/Jakarta').format('dddd, DD MMMM YYYY')
+const barat = moment.tz('Asia/Jakarta').format('HH:mm:ss')
+const tengah = moment.tz('Asia/Makassar').format('HH:mm:ss')
+const timur = moment.tz('Asia/Jayapura').format('HH:mm:ss')
+const nyoutube = ('®  ZenssCuyy')  //ubah di config biar ngk emror
+const ini_mark = `0@s.whatsapp.net`
+const ownernya = ownernomer + '@s.whatsapp.net'
+
+//TIME
+const time2 = moment().tz('Asia/Jakarta').format('HH:mm:ss')  
+ if(time2 < "23:59:00"){
+var ucapanWaktu = 'Selamat Malam ??'
+ }
+ if(time2 < "19:00:00"){
+var ucapanWaktu = 'Selamat Sore ??'
+ }
+ if(time2 < "18:00:00"){
+var ucapanWaktu = 'Selamat Sore ??'
+ }
+ if(time2 < "15:00:00"){
+var ucapanWaktu = 'Selamat Siang ??'
+ }
+ if(time2 < "11:00:00"){
+var ucapanWaktu = 'Selamat Pagi ??'
+ }
+ if(time2 < "05:00:00"){
+var ucapanWaktu = 'Selamat Pagi ??'
+ } 
+
+// read database
+let tebaklagu = db.data.game.tebaklagu = []
+let _family100 = db.data.game.family100 = []
+let kuismath = db.data.game.math = []
+let tebakgambar = db.data.game.tebakgambar = []
+let tebakkata = db.data.game.tebakkata = []
+let caklontong = db.data.game.lontong = []
+let caklontong_desk = db.data.game.lontong_desk = []
+let tebakkalimat = db.data.game.kalimat = []
+let tebaklirik = db.data.game.lirik = []
+let tebaktebakan = db.data.game.tebakan = []
+let vote = db.data.others.vote = []
+
+module.exports = zens = async (zens, m, chatUpdate, store) => {
+    try {
+        var body = (m.mtype === 'conversation') ? m.message.conversation : (m.mtype == 'imageMessage') ? m.message.imageMessage.caption : (m.mtype == 'videoMessage') ? m.message.videoMessage.caption : (m.mtype == 'extendedTextMessage') ? m.message.extendedTextMessage.text : (m.mtype == 'buttonsResponseMessage') ? m.message.buttonsResponseMessage.selectedButtonId : (m.mtype == 'listResponseMessage') ? m.message.listResponseMessage.singleSelectReply.selectedRowId : (m.mtype == 'templateButtonReplyMessage') ? m.message.templateButtonReplyMessage.selectedId : (m.mtype === 'messageContextInfo') ? (m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply.selectedRowId || m.text) : ''
+        var budy = (typeof m.text == 'string' ? m.text : '')
+        var prefix = prefa ? /^[°•p÷×¶?£¢€¥®™+?_=|~!?@#$%^&.©^]/gi.test(body) ? body.match(/^[°•p÷×¶?£¢€¥®™+?_=|~!?@#$%^&.©^]/gi)[0] : "" : prefa ?? global.prefix
+        const isCmd = body.startsWith(prefix)
+        const command = body.replace(prefix, '').trim().split(/ +/).shift().toLowerCase()
+        const args = body.trim().split(/ +/).slice(1)
+        const pushname = m.pushName || "No Name"
+        const botNumber = await zens.decodeJid(zens.user.id)
+        const isCreator = [botNumber, ...global.owner].map(v => v.replace(/[^0-9]/g, '') + '@s.whatsapp.net').includes(m.sender)
+        const itsMe = m.sender == botNumber ? true : false
+        const text = q = args.join(" ")
+        const quoted = m.quoted ? m.quoted : m
+        const mime = (quoted.msg || quoted).mimetype || ''
+        const isMedia = /image|video|sticker|audio/.test(mime)
+        const sender = m.isGroup ? (mek.key.participant ? mek.key.participant : mek.participant) : mek.key.remoteJid
+     
+	 
+	    //Fake
+	    const ftroli ={key: {fromMe: false,"participant":"0@s.whatsapp.net", "remoteJid": "status@broadcast"}, "message": {orderMessage: {itemCount: 2022,status: 200, thumbnail: thumb, surface: 200, message: '®Zenss', orderTitle: 'memek', sellerJid: '0@s.whatsapp.net'}}, contextInfo: {"forwardingScore":999,"isForwarded":true},sendEphemeral: true}
+		const fdoc = {key : {participant : '0@s.whatsapp.net', ...(m.chat ? { remoteJid: `status@broadcast` } : {}) },message: {documentMessage: {title: '®Zenss',jpegThumbnail: thumb}}}
+		const fvn = {key: {participant: `0@s.whatsapp.net`, ...(m.chat ? { remoteJid: "status@broadcast" } : {})},message: { "audioMessage": {"mimetype":"audio/ogg; codecs=opus","seconds":359996400,"ptt": "true"}} } 
+		const fgif = {key: {participant: `0@s.whatsapp.net`, ...(m.chat ? { remoteJid: "status@broadcast" } : {})},message: {"videoMessage": { "title":'®Zenss', "h": `Hmm`,'seconds': '359996400', 'gifPlayback': 'true', 'caption': '®Zenss', 'jpegThumbnail': thumb}}}
+		const fgclink = {key: {participant: "0@s.whatsapp.net","remoteJid": "0@s.whatsapp.net"},"message": {"groupInviteMessage": {"groupJid": "6288213840883-1616169743@g.us","inviteCode": "m","groupName": "ig : @xaveey.xv", "caption": '®Zenss', 'jpegThumbnail': thumb}}}
+		const fvideo = {key: { fromMe: false,participant: `0@s.whatsapp.net`, ...(m.chat ? { remoteJid: "status@broadcast" } : {}) },message: { "videoMessage": { "title":`${pushname}`, "h": `Hmm`,'seconds': '359996400', 'caption': `${pushname}`, 'jpegThumbnail': thumb}}}
+		const floc = {key : {participant : '0@s.whatsapp.net', ...(m.chat ? { remoteJid: `status@broadcast` } : {}) },message: {locationMessage: {name: 'zens cuy',jpegThumbnail: thumb}}}
+		const fkontak = { key: {participant: `0@s.whatsapp.net`, ...(m.chat ? { remoteJid: `status@broadcast` } : {}) }, message: { 'contactMessage': { 'displayName': 'Zenss', 'vcard': `BEGIN:VCARD\nVERSION:3.0\nN:XL;Zenss,;;;\nFN:ZenssCuyy\nitem1.TEL;waid=62895604670507:62895604670507\nitem1.X-ABLabel:Ponsel\nEND:VCARD`, 'jpegThumbnail': thumb, thumbnail: thumb,sendEphemeral: true}}}
+	    const fakestatus = {key: {fromMe: false,participant: `0@s.whatsapp.net`, ...(m.chat ? { remoteJid: "status@broadcast" } : {})},message: { "imageMessage": {"url": "https://mmg.whatsapp.net/d/f/At0x7ZdIvuicfjlf9oWS6A3AR9XPh0P-hZIVPLsI70nM.enc","mimetype": "image/jpeg","caption": '®Zenss',"fileSha256": "+Ia+Dwib70Y1CWRMAP9QLJKjIJt54fKycOfB2OEZbTU=","fileLength": "28777","height": 1080,"width": 1079,"mediaKey": "vXmRR7ZUeDWjXy5iQk17TrowBzuwRya0errAFnXxbGc=","fileEncSha256": "sR9D2RS5JSifw49HeBADguI23fWDz1aZu4faWG/CyRY=","directPath": "/v/t62.7118-24/21427642_840952686474581_572788076332761430_n.enc?oh=3f57c1ba2fcab95f2c0bb475d72720ba&oe=602F3D69","mediaKeyTimestamp": "1610993486","jpegThumbnail": fs.readFileSync('./image/zens.jpg'),"scansSidecar": "1W0XhfaAcDwc7xh1R8lca6Qg/1bB4naFCSngM2LKO2NoP5RI7K+zLw=="}}}
+		
+        // Group
+        const groupMetadata = m.isGroup ? await zens.groupMetadata(m.chat).catch(e => {}) : ''
+        const groupName = m.isGroup ? groupMetadata.subject : ''
+        const participants = m.isGroup ? await groupMetadata.participants : ''
+        const groupAdmins = m.isGroup ? await getGroupAdmins(participants) : ''
+    	const isBotAdmins = m.isGroup ? groupAdmins.includes(botNumber) : false
+    	const isAdmins = m.isGroup ? groupAdmins.includes(m.sender) : false
+    	const isPremium = isCreator || global.premium.map(v => v.replace(/[^0-9]/g, '') + '@s.whatsapp.net').includes(m.sender) || false
+        const sotoy = [
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+        '?? : ?? : ??',		
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??',
+		'?? : ?? : ??  Win',
+		'?? : ?? : ?? Win',
+		'?? : ?? : ?? Lose'
+		]
+	
+	
+	try {
+            let isNumber = x => typeof x === 'number' && !isNaN(x)
+            let limitUser = isPremium ? global.limitawal.premium : global.limitawal.free
+            let user = global.db.data.users[m.sender]
+            if (typeof user !== 'object') global.db.data.users[m.sender] = {}
+            if (user) {
+                if (!isNumber(user.afkTime)) user.afkTime = -1
+                if (!('afkReason' in user)) user.afkReason = ''
+                if (!isNumber(user.limit)) user.limit = limitUser
+            } else global.db.data.users[m.sender] = {
+                afkTime: -1,
+                afkReason: '',
+                limit: limitUser,
+            }
+    
+            let chats = global.db.data.chats[m.chat]
+            if (typeof chats !== 'object') global.db.data.chats[m.chat] = {}
+            if (chats) {
+                if (!('mute' in chats)) chats.mute = false
+                if (!('antilink' in chats)) chats.antilink = false
+            } else global.db.data.chats[m.chat] = {
+                mute: false,
+                antilink: false,
+            }
+		
+	    let setting = global.db.data.settings[botNumber]
+            if (typeof setting !== 'object') global.db.data.settings[botNumber] = {}
+	    if (setting) {
+		if (!isNumber(setting.status)) setting.status = 0
+		if (!('autobio' in setting)) setting.autobio = true
+		if (!('templateImage' in setting)) setting.templateImage = true
+		if (!('templateVideo' in setting)) setting.templateVideo = false
+		if (!('templateGif' in setting)) setting.templateGif = false
+		if (!('templateMsg' in setting)) setting.templateMsg = false	
+	    } else global.db.data.settings[botNumber] = {
+		status: 0,
+		autobio: true,
+		templateImage: true,
+		templateVideo: false,
+		templateGif: false,
+		templateMsg: false,
+	    }
+	    
+        } catch (err) {
+            console.error(err)
+        }
+        
+        // Public & Self
+        if (!zens.public) {
+            if (!m.key.fromMe) return
+        }
+        if (m.message) {
+            zens.readMessages([m.key])
         }
 
-    @staticmethod
-    def csv_header(delimiter=','):
-        """Return CSV Headers"""
+	// reset limit every 12 hours
+        let cron = require('node-cron')
+        cron.schedule('00 12 * * *', () => {
+            let user = Object.keys(global.db.data.users)
+            let limitUser = isPremium ? global.limitawal.premium : global.limitawal.free
+            for (let jid of user) global.db.data.users[jid].limit = limitUser
+            console.log('Reseted Limit')
+        }, {
+            scheduled: true,
+            timezone: "Asia/Jakarta"
+        })
+        
+	// auto set bio
+	if (db.data.settings[botNumber].autobio) {
+	    let setting = global.db.data.settings[botNumber]
+	    if (new Date() * 1 - setting.status > 1000) {
+		let uptime = await runtime(process.uptime())
+		await zens.setStatus(`${zens.user.name} | Runtime : ${runtime(uptime)}`)
+		setting.status = new Date() * 1
+	    }
+	}
+	    
+	  // Anti Link
+        if (db.data.chats[m.chat].antilink) {
+        if (budy.match(`chat.whatsapp.com`)) {
+        m.reply(`? *ANTI LINK* ?\n\n*Kamu terdeteksi mengirim link group*, *maaf kamu akan di kick??,yang mau juga silahkan kirim link??*`)
+        if (!isBotAdmins) return m.reply(`*Bot aja bukan admin anj*`)
+        let gclink = (`https://chat.whatsapp.com/`+await zens.groupInviteCode(m.chat))
+        let isLinkThisGc = new RegExp(gclink, 'i')
+        let isgclink = isLinkThisGc.test(m.text)
+        if (isgclink) return m.reply(`*maaf gak jadi, karena kamu ngirim link group ini*`)
+        if (isAdmins) return m.reply(`*maaf kamu admin*`)
+        if (isCreator) return m.reply(`*maaf kamu owner bot ku*`)
+        zens.groupParticipantsUpdate(m.chat, [m.sender], 'remove')
+        }
+        }
+        
+      // Mute Chat
+      if (db.data.chats[m.chat].mute && !isAdmins && !isCreator) {
+      return
+      }
 
-        row = ['Server ID', 'Sponsor', 'Server Name', 'Timestamp', 'Distance',
-               'Ping', 'Download', 'Upload', 'Share', 'IP Address']
-        out = StringIO()
-        writer = csv.writer(out, delimiter=delimiter, lineterminator='')
-        writer.writerow([to_utf8(v) for v in row])
-        return out.getvalue()
+        // Respon Cmd with media
+        if (isMedia && m.msg.fileSha256 && (m.msg.fileSha256.toString('base64') in global.db.data.sticker)) {
+        let hash = global.db.data.sticker[m.msg.fileSha256.toString('base64')]
+        let { text, mentionedJid } = hash
+        let messages = await generateWAMessage(m.chat, { text: text, mentions: mentionedJid }, {
+            userJid: zens.user.id,
+            quoted: m.quoted && m.quoted.fakeObj
+        })
+        messages.key.fromMe = areJidsSameUser(m.sender, zens.user.id)
+        messages.key.id = m.key.id
+        messages.pushName = m.pushName
+        if (m.isGroup) messages.participant = m.sender
+        let msg = {
+            ...chatUpdate,
+            messages: [proto.WebMessageInfo.fromObject(messages)],
+            type: 'append'
+        }
+        zens.ev.emit('messages.upsert', msg)
+        }
+	    
+	if (('family100'+m.chat in _family100) && isCmd) {
+            kuis = true
+            let room = _family100['family100'+m.chat]
+            let teks = budy.toLowerCase().replace(/[^\w\s\-]+/, '')
+            let isSurender = /^((me)?nyerah|surr?ender)$/i.test(m.text)
+            if (!isSurender) {
+                let index = room.jawaban.findIndex(v => v.toLowerCase().replace(/[^\w\s\-]+/, '') === teks)
+                if (room.terjawab[index]) return !0
+                room.terjawab[index] = m.sender
+            }
+            let isWin = room.terjawab.length === room.terjawab.filter(v => v).length
+            let caption = `
+Jawablah Pertanyaan Berikut :\n${room.soal}\n\n\nTerdapat ${room.jawaban.length} Jawaban ${room.jawaban.find(v => v.includes(' ')) ? `(beberapa Jawaban Terdapat Spasi)` : ''}
+${isWin ? `Semua Jawaban Terjawab` : isSurender ? 'Menyerah!' : ''}
+${Array.from(room.jawaban, (jawaban, index) => {
+        return isSurender || room.terjawab[index] ? `(${index + 1}) ${jawaban} ${room.terjawab[index] ? '@' + room.terjawab[index].split('@')[0] : ''}`.trim() : false
+    }).filter(v => v).join('\n')}
+    ${isSurender ? '' : `Perfect Player`}`.trim()
+            zens.sendText(m.chat, caption, m, { contextInfo: { mentionedJid: parseMention(caption) }}).then(mes => { return _family100['family100'+m.chat].pesan = mesg }).catch(_ => _)
+            if (isWin || isSurender) delete _family100['family100'+m.chat]
+        }
 
-    def csv(self, delimiter=','):
-        """Return data in CSV format"""
+        if (tebaklagu.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = tebaklagu[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lagu', buttonText: { displayText: 'Tebak Lagu' }, type: 1 }], `?? Tebak Lagu ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                delete tebaklagu[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
 
-        data = self.dict()
-        out = StringIO()
-        writer = csv.writer(out, delimiter=delimiter, lineterminator='')
-        row = [data['server']['id'], data['server']['sponsor'],
-               data['server']['name'], data['timestamp'],
-               data['server']['d'], data['ping'], data['download'],
-               data['upload'], self._share or '', self.client['ip']]
-        writer.writerow([to_utf8(v) for v in row])
-        return out.getvalue()
+        if (kuismath.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = kuismath[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await m.reply(`?? Kuis Matematika  ??\n\nJawaban Benar ??\n\nIngin bermain lagi? kirim ${prefix}math mode`)
+                delete kuismath[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
 
-    def json(self, pretty=False):
-        """Return data in JSON format"""
+        if (tebakgambar.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = tebakgambar[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak gambar', buttonText: { displayText: 'Tebak Gambar' }, type: 1 }], `?? Tebak Gambar ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                delete tebakgambar[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
 
-        kwargs = {}
-        if pretty:
-            kwargs.update({
-                'indent': 4,
-                'sort_keys': True
+        if (tebakkata.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = tebakkata[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak kata', buttonText: { displayText: 'Tebak Kata' }, type: 1 }], `?? Tebak Kata ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                delete tebakkata[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
+
+        if (caklontong.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = caklontong[m.sender.split('@')[0]]
+	    deskripsi = caklontong_desk[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lontong', buttonText: { displayText: 'Tebak Lontong' }, type: 1 }], `?? Cak Lontong ??\n\nJawaban Benar ??\n*${deskripsi}*\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                delete caklontong[m.sender.split('@')[0]]
+		delete caklontong_desk[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
+
+        if (tebakkalimat.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = tebakkalimat[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak kalimat', buttonText: { displayText: 'Tebak Kalimat' }, type: 1 }], `?? Tebak Kalimat ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                delete tebakkalimat[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
+
+        if (tebaklirik.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = tebaklirik[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak lirik', buttonText: { displayText: 'Tebak Lirik' }, type: 1 }], `?? Tebak Lirik ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                delete tebaklirik[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
+	    
+	if (tebaktebakan.hasOwnProperty(m.sender.split('@')[0]) && isCmd) {
+            kuis = true
+            jawaban = tebaktebakan[m.sender.split('@')[0]]
+            if (budy.toLowerCase() == jawaban) {
+                await zens.sendButtonText(m.chat, [{ buttonId: 'tebak tebakan', buttonText: { displayText: 'Tebak Tebakan' }, type: 1 }], `?? Tebak Tebakan ??\n\nJawaban Benar ??\n\nIngin bermain lagi? tekan button dibawah`, zens.user.name, m)
+                delete tebaktebakan[m.sender.split('@')[0]]
+            } else m.reply('*Jawaban Salah!*')
+        }
+        
+        //TicTacToe
+	    this.game = this.game ? this.game : {}
+	    let room = Object.values(this.game).find(room => room.id && room.game && room.state && room.id.startsWith('tictactoe') && [room.game.playerX, room.game.playerO].includes(m.sender) && room.state == 'PLAYING')
+	    if (room) {
+	    let ok
+	    let isWin = !1
+	    let isTie = !1
+	    let isSurrender = !1
+	    // m.reply(`[DEBUG]\n${parseInt(m.text)}`)
+	    if (!/^([1-9]|(me)?nyerah|surr?ender|off|skip)$/i.test(m.text)) return
+	    isSurrender = !/^[1-9]$/.test(m.text)
+	    if (m.sender !== room.game.currentTurn) { // nek wayahku
+	    if (!isSurrender) return !0
+	    }
+	    if (!isSurrender && 1 > (ok = room.game.turn(m.sender === room.game.playerO, parseInt(m.text) - 1))) {
+	    m.reply({
+	    '-3': 'Game telah berakhir',
+	    '-2': 'Invalid',
+	    '-1': 'Posisi Invalid',
+	    0: 'Posisi Invalid',
+	    }[ok])
+	    return !0
+	    }
+	    if (m.sender === room.game.winner) isWin = true
+	    else if (room.game.board === 511) isTie = true
+	    let arr = room.game.render().map(v => {
+	    return {
+	    X: '?',
+	    O: '?',
+	    1: '1??',
+	    2: '2??',
+	    3: '3??',
+	    4: '4??',
+	    5: '5??',
+	    6: '6??',
+	    7: '7??',
+	    8: '8??',
+	    9: '9??',
+	    }[v]
+	    })
+	    if (isSurrender) {
+	    room.game._currentTurn = m.sender === room.game.playerX
+	    isWin = true
+	    }
+	    let winner = isSurrender ? room.game.currentTurn : room.game.winner
+	    let str = `Room ID: ${room.id}
+
+${arr.slice(0, 3).join('')}
+${arr.slice(3, 6).join('')}
+${arr.slice(6).join('')}
+
+${isWin ? `@${winner.split('@')[0]} Menang!` : isTie ? `Game berakhir` : `Giliran ${['?', '?'][1 * room.game._currentTurn]} (@${room.game.currentTurn.split('@')[0]})`}
+?: @${room.game.playerX.split('@')[0]}
+?: @${room.game.playerO.split('@')[0]}
+
+Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
+	    if ((room.game._currentTurn ^ isSurrender ? room.x : room.o) !== m.chat)
+	    room[room.game._currentTurn ^ isSurrender ? 'x' : 'o'] = m.chat
+	    if (room.x !== room.o) await zens.sendText(room.x, str, m, { mentions: parseMention(str) } )
+	    await zens.sendText(room.o, str, m, { mentions: parseMention(str) } )
+	    if (isTie || isWin) {
+	    delete this.game[room.id]
+	    }
+	    }
+
+        //Suit PvP
+	    this.suit = this.suit ? this.suit : {}
+	    let roof = Object.values(this.suit).find(roof => roof.id && roof.status && [roof.p, roof.p2].includes(m.sender))
+	    if (roof) {
+	    let win = ''
+	    let tie = false
+	    if (m.sender == roof.p2 && /^(acc(ept)?|terima|gas|oke?|tolak|gamau|nanti|ga(k.)?bisa|y)/i.test(m.text) && m.isGroup && roof.status == 'wait') {
+	    if (/^(tolak|gamau|nanti|n|ga(k.)?bisa)/i.test(m.text)) {
+	    zens.sendTextWithMentions(m.chat, `@${roof.p2.split`@`[0]} menolak suit, suit dibatalkan`, m)
+	    delete this.suit[roof.id]
+	    return !0
+	    }
+	    roof.status = 'play'
+	    roof.asal = m.chat
+	    clearTimeout(roof.waktu)
+	    //delete roof[roof.id].waktu
+	    zens.sendText(m.chat, `Suit telah dikirimkan ke chat
+
+@${roof.p.split`@`[0]} dan 
+@${roof.p2.split`@`[0]}
+
+Silahkan pilih suit di chat masing"
+klik https://wa.me/${botNumber.split`@`[0]}`, m, { mentions: [roof.p, roof.p2] })
+	    if (!roof.pilih) zens.sendText(roof.p, `Silahkan pilih \n\nBatu??\nKertas??\nGunting??`, m)
+	    if (!roof.pilih2) zens.sendText(roof.p2, `Silahkan pilih \n\nBatu??\nKertas??\nGunting??`, m)
+	    roof.waktu_milih = setTimeout(() => {
+	    if (!roof.pilih && !roof.pilih2) zens.sendText(m.chat, `Kedua pemain tidak niat main,\nSuit dibatalkan`)
+	    else if (!roof.pilih || !roof.pilih2) {
+	    win = !roof.pilih ? roof.p2 : roof.p
+	    zens.sendTextWithMentions(m.chat, `@${(roof.pilih ? roof.p2 : roof.p).split`@`[0]} tidak memilih suit, game berakhir`, m)
+	    }
+	    delete this.suit[roof.id]
+	    return !0
+	    }, roof.timeout)
+	    }
+	    let jwb = m.sender == roof.p
+	    let jwb2 = m.sender == roof.p2
+	    let g = /gunting/i
+	    let b = /batu/i
+	    let k = /kertas/i
+	    let reg = /^(gunting|batu|kertas)/i
+	    if (jwb && reg.test(m.text) && !roof.pilih && !m.isGroup) {
+	    roof.pilih = reg.exec(m.text.toLowerCase())[0]
+	    roof.text = m.text
+	    m.reply(`Kamu telah memilih ${m.text} ${!roof.pilih2 ? `\n\nMenunggu lawan memilih` : ''}`)
+	    if (!roof.pilih2) zens.sendText(roof.p2, '_Lawan sudah memilih_\nSekarang giliran kamu', 0)
+	    }
+	    if (jwb2 && reg.test(m.text) && !roof.pilih2 && !m.isGroup) {
+	    roof.pilih2 = reg.exec(m.text.toLowerCase())[0]
+	    roof.text2 = m.text
+	    m.reply(`Kamu telah memilih ${m.text} ${!roof.pilih ? `\n\nMenunggu lawan memilih` : ''}`)
+	    if (!roof.pilih) zens.sendText(roof.p, '_Lawan sudah memilih_\nSekarang giliran kamu', 0)
+	    }
+	    let stage = roof.pilih
+	    let stage2 = roof.pilih2
+	    if (roof.pilih && roof.pilih2) {
+	    clearTimeout(roof.waktu_milih)
+	    if (b.test(stage) && g.test(stage2)) win = roof.p
+	    else if (b.test(stage) && k.test(stage2)) win = roof.p2
+	    else if (g.test(stage) && k.test(stage2)) win = roof.p
+	    else if (g.test(stage) && b.test(stage2)) win = roof.p2
+	    else if (k.test(stage) && b.test(stage2)) win = roof.p
+	    else if (k.test(stage) && g.test(stage2)) win = roof.p2
+	    else if (stage == stage2) tie = true
+	    zens.sendText(roof.asal, `_*Hasil Suit*_${tie ? '\nSERI' : ''}
+
+@${roof.p.split`@`[0]} (${roof.text}) ${tie ? '' : roof.p == win ? ` Menang \n` : ` Kalah \n`}
+@${roof.p2.split`@`[0]} (${roof.text2}) ${tie ? '' : roof.p2 == win ? ` Menang \n` : ` Kalah \n`}
+`.trim(), m, { mentions: [roof.p, roof.p2] })
+	    delete this.suit[roof.id]
+	    }
+	    }
+	    
+	    let mentionUser = [...new Set([...(m.mentionedJid || []), ...(m.quoted ? [m.quoted.sender] : [])])]
+	    for (let jid of mentionUser) {
+            let user = global.db.data.users[jid]
+            if (!user) continue
+            let afkTime = user.afkTime
+            if (!afkTime || afkTime < 0) continue
+            let reason = user.afkReason || ''
+            m.reply(`
+Jangan tag dia!
+Dia sedang AFK ${reason ? 'dengan alasan ' + reason : 'tanpa alasan'}
+Selama ${clockString(new Date - afkTime)}
+`.trim())
+        }
+
+        if (db.data.users[m.sender].afkTime > -1) {
+            let user = global.db.data.users[m.sender]
+            m.reply(`
+Kamu berhenti AFK${user.afkReason ? ' setelah ' + user.afkReason : ''}
+Selama ${clockString(new Date - user.afkTime)}
+`.trim())
+            user.afkTime = -1
+            user.afkReason = ''
+        }
+	    
+        switch(command) {
+	    case 'afk': {
+                let user = global.db.data.users[m.sender]
+                user.afkTime = + new Date
+                user.afkReason = text
+                m.reply(`${m.pushName} *Telah Afk*${text ? ': ' + text : ''}`)
+            }
+            break	
+        case 'ttc': case 'ttt': case 'tictactoe': {
+        	if (!m.isGroup) throw mess.group
+            let TicTacToe = require("./lib/tictactoe")
+            this.game = this.game ? this.game : {}
+            if (Object.values(this.game).find(room => room.id.startsWith('tictactoe') && [room.game.playerX, room.game.playerO].includes(m.sender))) throw 'Kamu masih didalam game'
+            let room = Object.values(this.game).find(room => room.state === 'WAITING' && (text ? room.name === text : true))
+            if (room) {
+            m.reply('Partner ditemukan!')
+            room.o = m.chat
+            room.game.playerO = m.sender
+            room.state = 'PLAYING'
+            let arr = room.game.render().map(v => {
+            return {
+            X: '?',
+            O: '?',
+            1: '1??',
+            2: '2??',
+            3: '3??',
+            4: '4??',
+            5: '5??',
+            6: '6??',
+            7: '7??',
+            8: '8??',
+            9: '9??',
+            }[v]
             })
-        return json.dumps(self.dict(), **kwargs)
+            let str = `Room ID: ${room.id}
 
+${arr.slice(0, 3).join('')}
+${arr.slice(3, 6).join('')}
+${arr.slice(6).join('')}
 
-class Speedtest(object):
-    """Class for performing standard speedtest.net testing operations"""
+Menunggu @${room.game.currentTurn.split('@')[0]}
 
-    def __init__(self, config=None, source_address=None, timeout=10,
-                 secure=False, shutdown_event=None):
-        self.config = {}
+Ketik *nyerah* untuk menyerah dan mengakui kekalahan`
+            if (room.x !== room.o) await zens.sendText(room.x, str, m, { mentions: parseMention(str) } )
+            await zens.sendText(room.o, str, m, { mentions: parseMention(str) } )
+            } else {
+            room = {
+            id: 'tictactoe-' + (+new Date),
+            x: m.chat,
+            o: '',
+            game: new TicTacToe(m.sender, 'o'),
+            state: 'WAITING'
+            }
+            if (text) room.name = text
+            m.reply('Menunggu partner' + (text ? ` mengetik command dibawah ini ${prefix}${command} ${text}` : ''))
+            this.game[room.id] = room
+            }
+            }
+            break
+            case 'delttc': case 'delttt': {
+            this.game = this.game ? this.game : {}
+            try {
+            if (this.game) {
+            delete this.game
+            zens.sendText(m.chat, `Berhasil delete session TicTacToe`, m)
+            } else if (!this.game) {
+            m.reply(`Session TicTacToe?? tidak ada`)
+            } else throw '?'
+            } catch (e) {
+            m.reply('rusak')
+            }
+            }
+            break
+            case 'suitpvp': case 'suit': {
+            this.suit = this.suit ? this.suit : {}
+            let poin = 10
+            let poin_lose = 10
+            let timeout = 60000
+            if (Object.values(this.suit).find(roof => roof.id.startsWith('suit') && [roof.p, roof.p2].includes(m.sender))) m.reply(`Selesaikan suit mu yang sebelumnya`)
+	    if (m.mentionedJid[0] === m.sender) return m.reply(`Tidak bisa bermain dengan diri sendiri !`)
+            if (!m.mentionedJid[0]) return m.reply(`_Siapa yang ingin kamu tantang?_\nTag orangnya..\n\nContoh : ${prefix}suit @${owner[1]}`, m.chat, { mentions: [owner[1] + '@s.whatsapp.net'] })
+            if (Object.values(this.suit).find(roof => roof.id.startsWith('suit') && [roof.p, roof.p2].includes(m.mentionedJid[0]))) throw `Orang yang kamu tantang sedang bermain suit bersama orang lain :(`
+            let id = 'suit_' + new Date() * 1
+            let caption = `_*SUIT PvP*_
 
-        self._source_address = source_address
-        self._timeout = timeout
-        self._opener = build_opener(source_address, timeout)
+@${m.sender.split`@`[0]} *menantang* @${m.mentionedJid[0].split`@`[0]} *untuk bermain suit*
 
-        self._secure = secure
+*Silahkan* @${m.mentionedJid[0].split`@`[0]} *untuk ketik terima/tolak*`
+            this.suit[id] = {
+            chat: await zens.sendText(m.chat, caption, m, { mentions: parseMention(caption) }),
+            id: id,
+            p: m.sender,
+            p2: m.mentionedJid[0],
+            status: 'wait',
+            waktu: setTimeout(() => {
+            if (this.suit[id]) zens.sendText(m.chat, `_Waktu suit habis_`, m)
+            delete this.suit[id]
+            }, 60000), poin, poin_lose, timeout
+            }
+            }
+            break
+	    case 'donasi': case 'sewabot': case 'sewa': case 'buypremium': case 'donate': {
+                zens.sendMessage(m.chat, { image: { url: 'https://telegra.ph/file/0b31865ef182a7681f9c3.jpg' }, caption: `*${ucapanWaktu} Kak ${m.pushName}*\n\n *Jika ingin berdonasi silahkan scan gambar diatas*\n\n*Jika ingin sewa bot atau premium*\n*Silahkan Chat Owner*\n\n*Atau klik link dibawah ini*\n_https://saweria.co/\n\n*Atau Transfer via*\n- *Gopay Dana Ovo Qris ShopeePay*\n chat nomor berikut : wa.me/62895604670507\n\n_Terima kasih_` }, { quoted: m })
+            }
+            break 
+            case 'chat': {
+                if (!isCreator) throw mess.owner
+                if (!q) throw 'Option : 1. mute\n2. unmute\n3. archive\n4. unarchive\n5. read\n6. unread\n7. delete'
+                if (args[0] === 'mute') {
+                    zens.chatModify({ mute: 'Infinity' }, m.chat, []).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'unmute') {
+                    zens.chatModify({ mute: null }, m.chat, []).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'archive') {
+                    zens.chatModify({  archive: true }, m.chat, []).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'unarchive') {
+                    zens.chatModify({ archive: false }, m.chat, []).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'read') {
+                    zens.chatModify({ markRead: true }, m.chat, []).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'unread') {
+                    zens.chatModify({ markRead: false }, m.chat, []).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'delete') {
+                    zens.chatModify({ clear: { message: { id: m.quoted.id, fromMe: true }} }, m.chat, []).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                }
+            }
+            break
+	    case 'family100': {
+                if ('family100'+m.chat in _family100) {
+                    m.reply('Masih Ada Sesi Yang Belum Diselesaikan!')
+                    throw false
+                }
+                let anu = await fetchJson('https://raw.githubusercontent.com/BochilTeam/database/master/games/family100.json')
+                let random = anu[Math.floor(Math.random() * anu.length)]
+                let hasil = `*Jawablah Pertanyaan Berikut :*\n${random.soal}\n\nTerdapat *${random.jawaban.length}* Jawaban ${random.jawaban.find(v => v.includes(' ')) ? `(beberapa Jawaban Terdapat Spasi)` : ''}`.trim()
+                _family100['family100'+m.chat] = {
+                    id: 'family100'+m.chat,
+                    pesan: await zens.sendText(m.chat, hasil, m),
+                    ...random,
+                    terjawab: Array.from(random.jawaban, () => false),
+                    hadiah: 6,
+                }
+            }
+            break
+            case 'halah': case 'hilih': case 'huluh': case 'heleh': case 'holoh':
+            if (!m.quoted && !text) throw `Kirim/reply text dengan caption ${prefix + command}`
+            ter = command[1].toLowerCase()
+            tex = m.quoted ? m.quoted.text ? m.quoted.text : q ? q : m.text : q ? q : m.text
+            m.reply(tex.replace(/[aiueo]/g, ter).replace(/[AIUEO]/g, ter.toUpperCase()))
+            break
+            case 'tebak': {
+                if (!text) throw `Example : ${prefix + command} lagu\n\nOption : \n1. lagu\n2. gambar\n3. kata\n4. kalimat\n5. lirik\n6.lontong`
+                if (args[0] === "lagu") {
+                    if (tebaklagu.hasOwnProperty(m.sender.split('@')[0])) throw "Masih Ada Sesi Yang Belum Diselesaikan!"
+                    let anu = await fetchJson('https://fatiharridho.github.io/tebaklagu.json')
+                    let result = anu[Math.floor(Math.random() * anu.length)]
+                    let msg = await zens.sendMessage(m.chat, { audio: { url: result.link_song }, mimetype: 'audio/mpeg' }, { quoted: m })
+                    zens.sendText(m.chat, `Lagu Tersebut Adalah Lagu dari?\n\nArtist : ${result.artist}\nWaktu : 60s`, msg).then(() => {
+                    tebaklagu[m.sender.split('@')[0]] = result.jawaban.toLowerCase()
+                    })
+                    await sleep(60000)
+                    if (tebaklagu.hasOwnProperty(m.sender.split('@')[0])) {
+                    console.log("Jawaban: " + result.jawaban)
+                    zens.sendButtonText(m.chat, [{ buttonId: 'tebak lagu', buttonText: { displayText: 'Tebak Lagu' }, type: 1 }], `Waktu Habis\nJawaban:  ${tebaklagu[m.sender.split('@')[0]]}\n\nIngin bermain? tekan button dibawah`, zens.user.name, m)
+                    delete tebaklagu[m.sender.split('@')[0]]
+                    }
+                } else if (args[0] === 'gambar') {
+                    if (tebakgambar.hasOwnProperty(m.sender.split('@')[0])) throw "Masih Ada Sesi Yang Belum Diselesaikan!"
+                    let anu = await fetchJson('https://raw.githubusercontent.com/BochilTeam/database/master/games/tebakgambar.json')
+                    let result = anu[Math.floor(Math.random() * anu.length)]
+                    zens.sendImage(m.chat, result.img, `Silahkan Jawab Soal Di Atas Ini\n\nDeskripsi : ${result.deskripsi}\nWaktu : 60s`, m).then(() => {
+                    tebakgambar[m.sender.split('@')[0]] = result.jawaban.toLowerCase()
+                    })
+                    await sleep(60000)
+                    if (tebakgambar.hasOwnProperty(m.sender.split('@')[0])) {
+                    console.log("Jawaban: " + result.jawaban)
+                    zens.sendButtonText(m.chat, [{ buttonId: 'tebak gambar', buttonText: { displayText: 'Tebak Gambar' }, type: 1 }], `Waktu Habis\nJawaban:  ${tebakgambar[m.sender.split('@')[0]]}\n\nIngin bermain? tekan button dibawah`, zens.user.name, m)
+                    delete tebakgambar[m.sender.split('@')[0]]
+                    }
+                } else if (args[0] === 'kata') {
+                    if (tebakkata.hasOwnProperty(m.sender.split('@')[0])) throw "Masih Ada Sesi Yang Belum Diselesaikan!"
+                    let anu = await fetchJson('https://raw.githubusercontent.com/BochilTeam/database/master/games/tebakkata.json')
+                    let result = anu[Math.floor(Math.random() * anu.length)]
+                    zens.sendText(m.chat, `Silahkan Jawab Pertanyaan Berikut\n\n${result.soal}\nWaktu : 60s`, m).then(() => {
+                    tebakkata[m.sender.split('@')[0]] = result.jawaban.toLowerCase()
+                    })
+                    await sleep(60000)
+                    if (tebakkata.hasOwnProperty(m.sender.split('@')[0])) {
+                    console.log("Jawaban: " + result.jawaban)
+                    zens.sendButtonText(m.chat, [{ buttonId: 'tebak kata', buttonText: { displayText: 'Tebak Kata' }, type: 1 }], `Waktu Habis\nJawaban:  ${tebakkata[m.sender.split('@')[0]]}\n\nIngin bermain? tekan button dibawah`, zens.user.name, m)
+                    delete tebakkata[m.sender.split('@')[0]]
+                    }
+                } else if (args[0] === 'kalimat') {
+                    if (tebakkalimat.hasOwnProperty(m.sender.split('@')[0])) throw "Masih Ada Sesi Yang Belum Diselesaikan!"
+                    let anu = await fetchJson('https://raw.githubusercontent.com/BochilTeam/database/master/games/tebakkalimat.json')
+                    let result = anu[Math.floor(Math.random() * anu.length)]
+                    zens.sendText(m.chat, `Silahkan Jawab Pertanyaan Berikut\n\n${result.soal}\nWaktu : 60s`, m).then(() => {
+                    tebakkalimat[m.sender.split('@')[0]] = result.jawaban.toLowerCase()
+                    })
+                    await sleep(60000)
+                    if (tebakkalimat.hasOwnProperty(m.sender.split('@')[0])) {
+                    console.log("Jawaban: " + result.jawaban)
+                    zens.sendButtonText(m.chat, [{ buttonId: 'tebak kalimat', buttonText: { displayText: 'Tebak Kalimat' }, type: 1 }], `Waktu Habis\nJawaban:  ${tebakkalimat[m.sender.split('@')[0]]}\n\nIngin bermain? tekan button dibawah`, zens.user.name, m)
+                    delete tebakkalimat[m.sender.split('@')[0]]
+                    }
+                } else if (args[0] === 'lirik') {
+                    if (tebaklirik.hasOwnProperty(m.sender.split('@')[0])) throw "Masih Ada Sesi Yang Belum Diselesaikan!"
+                    let anu = await fetchJson('https://raw.githubusercontent.com/BochilTeam/database/master/games/tebaklirik.json')
+                    let result = anu[Math.floor(Math.random() * anu.length)]
+                    zens.sendText(m.chat, `Ini Adalah Lirik Dari Lagu? : *${result.soal}*?\nWaktu : 60s`, m).then(() => {
+                    tebaklirik[m.sender.split('@')[0]] = result.jawaban.toLowerCase()
+                    })
+                    await sleep(60000)
+                    if (tebaklirik.hasOwnProperty(m.sender.split('@')[0])) {
+                    console.log("Jawaban: " + result.jawaban)
+                    zens.sendButtonText(m.chat, [{ buttonId: 'tebak lirik', buttonText: { displayText: 'Tebak Lirik' }, type: 1 }], `Waktu Habis\nJawaban:  ${tebaklirik[m.sender.split('@')[0]]}\n\nIngin bermain? tekan button dibawah`, zens.user.name, m)
+                    delete tebaklirik[m.sender.split('@')[0]]
+                    }
+                } else if (args[0] === 'lontong') {
+                    if (caklontong.hasOwnProperty(m.sender.split('@')[0])) throw "Masih Ada Sesi Yang Belum Diselesaikan!"
+                    let anu = await fetchJson('https://raw.githubusercontent.com/BochilTeam/database/master/games/caklontong.json')
+                    let result = anu[Math.floor(Math.random() * anu.length)]
+                    zens.sendText(m.chat, `*Jawablah Pertanyaan Berikut :*\n${result.soal}*\nWaktu : 60s`, m).then(() => {
+                    caklontong[m.sender.split('@')[0]] = result.jawaban.toLowerCase()
+		    caklontong_desk[m.sender.split('@')[0]] = result.deskripsi
+                    })
+                    await sleep(60000)
+                    if (caklontong.hasOwnProperty(m.sender.split('@')[0])) {
+                    console.log("Jawaban: " + result.jawaban)
+                    zens.sendButtonText(m.chat, [{ buttonId: 'tebak lontong', buttonText: { displayText: 'Tebak Lontong' }, type: 1 }], `Waktu Habis\nJawaban:  ${caklontong[m.sender.split('@')[0]]}\nDeskripsi : ${caklontong_desk[m.sender.split('@')[0]]}\n\nIngin bermain? tekan button dibawah`, zens.user.name, m)
+                    delete caklontong[m.sender.split('@')[0]]
+		    delete caklontong_desk[m.sender.split('@')[0]]
+                    }
+                }
+            }
+            break
+            case 'kuismath': case 'math': {
+                if (kuismath.hasOwnProperty(m.sender.split('@')[0])) throw "Masih Ada Sesi Yang Belum Diselesaikan!"
+                let { genMath, modes } = require('./src/math')
+                if (!text) throw `Mode: ${Object.keys(modes).join(' | ')}\nContoh penggunaan: ${prefix}math medium`
+                let result = await genMath(text.toLowerCase())
+                zens.sendText(m.chat, `*Berapa hasil dari: ${result.soal.toLowerCase()}*?\n\nWaktu: ${(result.waktu / 1000).toFixed(2)} detik`, m).then(() => {
+                    kuismath[m.sender.split('@')[0]] = result.jawaban
+                })
+                await sleep(result.waktu)
+                if (kuismath.hasOwnProperty(m.sender.split('@')[0])) {
+                    console.log("Jawaban: " + result.jawaban)
+                    m.reply("Waktu Habis\nJawaban: " + kuismath[m.sender.split('@')[0]])
+                    delete kuismath[m.sender.split('@')[0]]
+                }
+            }
+            break
+            
+//Pembatas===============================================
+            case 'slot': {
+            const somtoy = sotoy[Math.floor(Math.random() * sotoy.length)]
+            let sloth =`[  ??VIRTUAL SLOT ??  ]\n------------------------\n\n?? : ?? : ??\n${somtoy}<=====\n?? : ?? : ??\n\n------------------------\n[  ?? VIRTUAL SLOT ??  ]\n\n*Keterangan* :\n_Jika Mendapatkan 3Buah Sama_\n_Berarti Kamu Win_\n\n_Contoh : ?? : ?? : ??_ <=====`
+            let buttons = [{ buttonId: 'slot', buttonText: { displayText: '??MAIN LAGI??' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, sloth, nyoutube, m)
+            }
+            break
+            case 'jodohku': {
+            if (!m.isGroup) throw mess.group
+            let member = participants.map(u => u.id)
+            let me = m.sender
+            let jodoh = member[Math.floor(Math.random() * member.length)]
+            let jawab = `??Jodoh mu adalah
 
-        if shutdown_event:
-            self._shutdown_event = shutdown_event
-        else:
-            self._shutdown_event = FakeShutdownEvent()
+@${me.split('@')[0]} ?? @${jodoh.split('@')[0]}`
+            let ments = [me, jodoh]
+            let buttons = [
+                        { buttonId: 'jodohku', buttonText: { displayText: 'Jodohku' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, jawab, zens.user.name, m, {mentions: ments})
+            }
+            break
+            case 'jadian': {
+            if (!m.isGroup) throw mess.group
+            let member = participants.map(u => u.id)
+            let orang = member[Math.floor(Math.random() * member.length)]
+            let jodoh = member[Math.floor(Math.random() * member.length)]
+            let jawab = `Ciee yang Jadian?? Jangan lupa Donasi??
 
-        self.get_config()
-        if config is not None:
-            self.config.update(config)
-
-        self.servers = {}
-        self.closest = []
-        self._best = {}
-
-        self.results = SpeedtestResults(
-            client=self.config['client'],
-            opener=self._opener,
-            secure=secure,
-        )
-
-    @property
-    def best(self):
-        if not self._best:
-            self.get_best_server()
-        return self._best
-
-    def get_config(self):
-        """Download the speedtest.net configuration and return only the data
-        we are interested in
-        """
-
-        headers = {}
-        if gzip:
-            headers['Accept-Encoding'] = 'gzip'
-        request = build_request('://www.speedtest.net/speedtest-config.php',
-                                headers=headers, secure=self._secure)
-        uh, e = catch_request(request, opener=self._opener)
-        if e:
-            raise ConfigRetrievalError(e)
-        configxml_list = []
-
-        stream = get_response_stream(uh)
-
-        while 1:
-            try:
-                configxml_list.append(stream.read(1024))
-            except (OSError, EOFError):
-                raise ConfigRetrievalError(get_exception())
-            if len(configxml_list[-1]) == 0:
+@${orang.split('@')[0]} ?? @${jodoh.split('@')[0]}`
+            let menst = [orang, jodoh]
+            let buttons = [
+                        { buttonId: 'jadian', buttonText: { displayText: 'Jadian' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m, {mentions: menst})
+            }
+            break
+            case 'gbtku': {
+            if (!isPremium) throw mess.premime
+			if (!text) throw `Example : ${prefix + command} hai|halo`
+            let jawab = `${text.split("|")[0]}`
+            let buttons = [{ buttonId: 'menu', buttonText: { displayText: `` }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, jawab, `${text.split("|")[1]}`, m)
+            }
+            break
+            case 'bisakah': {
+            	if (!text) throw `Example : ${prefix + command} saya menang?`
+            	let bisa = ['Bisa','Coba Saja','Pasti Bisa','Mungkin Saja','Tidak Bisa','Tidak Mungkin','Coba Ulangi','Ngimpi kah?','yakin bisa?']
+                let keh = bisa[Math.floor(Math.random() * bisa.length)]
+                let jawab = `*Bisakah ${text}*\nJawab : ${keh}`
+                let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: 'SABAR??' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m)
+            }
+            break
+            case 'apakah': {
+            	if (!text) throw `Example : ${prefix + command} saya bisa menang?`
+            	let apa = ['Iya','Tidak','Bisa Jadi','Coba Ulangi','Mungkin Saja','Coba Tanyakan Ayam']
+                let kah = apa[Math.floor(Math.random() * apa.length)]
+                let jawab = `*Apakah ${text}*\nJawab : ${kah}`
+                let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: 'HAHAHA' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m)
+            }
+            break
+            case 'kapan': case 'kapankah': {
+            	if (!text) throw `Example : ${prefix + command} saya menang?`
+            	let kapan = ['Besok','Lusa','Nanti','4 Hari Lagi','5 Hari Lagi','6 Hari Lagi','1 Minggu Lagi','2 Minggu Lagi','3 Minggu Lagi','1 Bulan Lagi','2 Bulan Lagi','3 Bulan Lagi','4 Bulan Lagi','5 Bulan Lagi','6 Bulan Lagi','1 Tahun Lagi','2 Tahun Lagi','3 Tahun Lagi','4 Tahun Lagi','5 Tahun Lagi','6 Tahun Lagi','1 Abad lagi','3 Hari Lagi','Bulan Depan','Nanti','Tidak Akan Pernah']
+                let koh = kapan[Math.floor(Math.random() * kapan.length)]
+                let jawab = `*${command} ${text}*\nJawab : ${koh}`
+                let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: 'SABAR??' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m)
+            }
+            break
+            
+           
+//PEMBATAS=======================================
+            case 'totalfitur': case 'totalfiture': case 'fiture': case 'fitur': {
+            	m.reply('*Total Ada 231 Fitur*\n_Ketik Req Untuk Request Fitur_')
+            }
+            break
+            case 'runtime': {
+            	let lowq = `*Bot Telah Online Selama*\n*${runtime(process.uptime())}*`
+                let buttons = [{ buttonId: 'donasi', buttonText: { displayText: '??SEWA' }, type: 1 }]
+                await zens.sendButtonText(m.chat, buttons, lowq, nyoutube, m, {quoted: fkontak})
+            	}
+            break
+            case 'req': case 'request': {
+            	if (!text) throw `Example : ${prefix + command} Fitur Min`
+               let ownernya = ownernomer + '@s.whatsapp.net'
+               let me = m.sender
+               let pjtxt = `Pesan Dari : @${me.split('@')[0]} \nUntuk : @${ownernya.split('@')[0]}\n\n${command} ${text}`
+               let ments = [ownernya, me]
+               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '??THANKS' }, type: 1 }]
+            await zens.sendButtonText(ownernya, buttons, pjtxt, nyoutube, m, {mentions: ments, quoted: fdoc})
+            let akhji = `*Request Telah Terkirim*\n*Ke Owner @${ownernya.split('@')[0]}*\n_Terima Kasih??_`
+            await zens.sendButtonText(m.chat, buttons, akhji, nyoutube, m, {mentions: ments, quoted: fkontak})
+            }
+            break
+            case 'react': {
+                if (!isCreator) throw mess.owner
+                reactionMessage = {
+                    react: {
+                        text: args[0],
+                        key: { remoteJid: m.chat, fromMe: true, id: quoted.id }
+                    }
+                }
+                zens.sendMessage(m.chat, reactionMessage)
+            }
+            break  
+            case 'join': {
+                if (!isCreator) throw mess.owner
+                if (!text) throw 'Masukkan Link Group!'
+                if (!isUrl(args[0]) && !args[0].includes('whatsapp.com')) throw 'Link Invalid!'
+                m.reply(mess.wait)
+                let result = args[0].split('https://chat.whatsapp.com/')[1]
+                await zens.groupAcceptInvite(result).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+            }
+            break
+            case 'leave': {
+                if (!isCreator) throw mess.owner
+                await zens.groupLeave(m.chat).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+            }
+            break
+            case 'setexif': {
+               if (!isCreator) throw mess.owner
+               if (!text) throw `Example : ${prefix + command} packname|author`
+          global.packname = text.split("|")[0]
+          global.author = text.split("|")[1]
+          m.reply(`Exif berhasil diubah menjadi\n\n? Packname : ${global.packname}\n? Author : ${global.author}`)
+            }
+            break
+	case 'kick': {
+		if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+		let users = m.mentionedJid[0] ? m.mentionedJid[0] : m.quoted ? m.quoted.sender : text.replace(/[^0-9]/g, '')+'@s.whatsapp.net'
+		await zens.groupParticipantsUpdate(m.chat, [users], 'remove').then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+	}
+	break
+	case 'add': {
+		if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+		let users = m.quoted ? m.quoted.sender : text.replace(/[^0-9]/g, '')+'@s.whatsapp.net'
+		await zens.groupParticipantsUpdate(m.chat, [users], 'add').then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+	}
+	break
+	case 'promote': {
+		if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+		let users = m.mentionedJid[0] ? m.mentionedJid[0] : m.quoted ? m.quoted.sender : text.replace(/[^0-9]/g, '')+'@s.whatsapp.net'
+		await zens.groupParticipantsUpdate(m.chat, [users], 'promote').then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+	}
+	break
+	case 'demote': {
+		if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+		let users = m.mentionedJid[0] ? m.mentionedJid[0] : m.quoted ? m.quoted.sender : text.replace(/[^0-9]/g, '')+'@s.whatsapp.net'
+		await zens.groupParticipantsUpdate(m.chat, [users], 'demote').then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+	}
+	break
+        case 'block': {
+		if (!isCreator) throw mess.owner
+		let users = m.mentionedJid[0] ? m.mentionedJid[0] : m.quoted ? m.quoted.sender : text.replace(/[^0-9]/g, '')+'@s.whatsapp.net'
+		await zens.updateBlockStatus(users, 'block').then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+	}
+	break
+        case 'unblock': {
+		if (!isCreator) throw mess.owner
+		let users = m.mentionedJid[0] ? m.mentionedJid[0] : m.quoted ? m.quoted.sender : text.replace(/[^0-9]/g, '')+'@s.whatsapp.net'
+		await zens.updateBlockStatus(users, 'unblock').then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+	}
+	break
+	    case 'setname': case 'setsubject': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+                if (!text) throw 'Text ?'
+                await zens.groupUpdateSubject(m.chat, text).then((res) => m.reply(mess.success)).catch((err) => m.reply(jsonformat(err)))
+            }
+            break
+          case 'setdesc': case 'setdesk': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+                if (!text) throw 'Text ?'
+                await zens.groupUpdateDescription(m.chat, text).then((res) => m.reply(mess.success)).catch((err) => m.reply(jsonformat(err)))
+            }
+            break
+          case 'setppbot': {
+                if (!isCreator) throw mess.owner
+                if (!quoted) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+                if (!/image/.test(mime)) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+                if (/webp/.test(mime)) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+                let media = await zens.downloadAndSaveMediaMessage(quoted)
+                await zens.updateProfilePicture(botNumber, { url: media }).catch((err) => fs.unlinkSync(media))
+                m.reply(mess.success)
+                }
                 break
-        stream.close()
-        uh.close()
-
-        if int(uh.code) != 200:
-            return None
-
-        configxml = ''.encode().join(configxml_list)
-
-        printer('Config XML:\n%s' % configxml, debug=True)
-
-        try:
-            try:
-                root = ET.fromstring(configxml)
-            except ET.ParseError:
-                e = get_exception()
-                raise SpeedtestConfigError(
-                    'Malformed speedtest.net configuration: %s' % e
-                )
-            server_config = root.find('server-config').attrib
-            download = root.find('download').attrib
-            upload = root.find('upload').attrib
-            # times = root.find('times').attrib
-            client = root.find('client').attrib
-
-        except AttributeError:
-            try:
-                root = DOM.parseString(configxml)
-            except ExpatError:
-                e = get_exception()
-                raise SpeedtestConfigError(
-                    'Malformed speedtest.net configuration: %s' % e
-                )
-            server_config = get_attributes_by_tag_name(root, 'server-config')
-            download = get_attributes_by_tag_name(root, 'download')
-            upload = get_attributes_by_tag_name(root, 'upload')
-            # times = get_attributes_by_tag_name(root, 'times')
-            client = get_attributes_by_tag_name(root, 'client')
-
-        ignore_servers = [
-            int(i) for i in server_config['ignoreids'].split(',') if i
-        ]
-
-        ratio = int(upload['ratio'])
-        upload_max = int(upload['maxchunkcount'])
-        up_sizes = [32768, 65536, 131072, 262144, 524288, 1048576, 7340032]
-        sizes = {
-            'upload': up_sizes[ratio - 1:],
-            'download': [350, 500, 750, 1000, 1500, 2000, 2500,
-                         3000, 3500, 4000]
-        }
-
-        size_count = len(sizes['upload'])
-
-        upload_count = int(math.ceil(upload_max / size_count))
-
-        counts = {
-            'upload': upload_count,
-            'download': int(download['threadsperurl'])
-        }
-
-        threads = {
-            'upload': int(upload['threads']),
-            'download': int(server_config['threadcount']) * 2
-        }
-
-        length = {
-            'upload': int(upload['testlength']),
-            'download': int(download['testlength'])
-        }
-
-        self.config.update({
-            'client': client,
-            'ignore_servers': ignore_servers,
-            'sizes': sizes,
-            'counts': counts,
-            'threads': threads,
-            'length': length,
-            'upload_max': upload_count * size_count
-        })
-
-        try:
-            self.lat_lon = (float(client['lat']), float(client['lon']))
-        except ValueError:
-            raise SpeedtestConfigError(
-                'Unknown location: lat=%r lon=%r' %
-                (client.get('lat'), client.get('lon'))
-            )
-
-        printer('Config:\n%r' % self.config, debug=True)
-
-        return self.config
-
-    def get_servers(self, servers=None, exclude=None):
-        """Retrieve a the list of speedtest.net servers, optionally filtered
-        to servers matching those specified in the ``servers`` argument
-        """
-        if servers is None:
-            servers = []
-
-        if exclude is None:
-            exclude = []
-
-        self.servers.clear()
-
-        for server_list in (servers, exclude):
-            for i, s in enumerate(server_list):
-                try:
-                    server_list[i] = int(s)
-                except ValueError:
-                    raise InvalidServerIDType(
-                        '%s is an invalid server type, must be int' % s
-                    )
-
-        urls = [
-            '://www.speedtest.net/speedtest-servers-static.php',
-            'http://c.speedtest.net/speedtest-servers-static.php',
-            '://www.speedtest.net/speedtest-servers.php',
-            'http://c.speedtest.net/speedtest-servers.php',
-        ]
-
-        headers = {}
-        if gzip:
-            headers['Accept-Encoding'] = 'gzip'
-
-        errors = []
-        for url in urls:
-            try:
-                request = build_request(
-                    '%s?threads=%s' % (url,
-                                       self.config['threads']['download']),
-                    headers=headers,
-                    secure=self._secure
-                )
-                uh, e = catch_request(request, opener=self._opener)
-                if e:
-                    errors.append('%s' % e)
-                    raise ServersRetrievalError()
-
-                stream = get_response_stream(uh)
-
-                serversxml_list = []
-                while 1:
-                    try:
-                        serversxml_list.append(stream.read(1024))
-                    except (OSError, EOFError):
-                        raise ServersRetrievalError(get_exception())
-                    if len(serversxml_list[-1]) == 0:
-                        break
-
-                stream.close()
-                uh.close()
-
-                if int(uh.code) != 200:
-                    raise ServersRetrievalError()
-
-                serversxml = ''.encode().join(serversxml_list)
-
-                printer('Servers XML:\n%s' % serversxml, debug=True)
-
-                try:
-                    try:
-                        try:
-                            root = ET.fromstring(serversxml)
-                        except ET.ParseError:
-                            e = get_exception()
-                            raise SpeedtestServersError(
-                                'Malformed speedtest.net server list: %s' % e
-                            )
-                        elements = etree_iter(root, 'server')
-                    except AttributeError:
-                        try:
-                            root = DOM.parseString(serversxml)
-                        except ExpatError:
-                            e = get_exception()
-                            raise SpeedtestServersError(
-                                'Malformed speedtest.net server list: %s' % e
-                            )
-                        elements = root.getElementsByTagName('server')
-                except (SyntaxError, xml.parsers.expat.ExpatError):
-                    raise ServersRetrievalError()
-
-                for server in elements:
-                    try:
-                        attrib = server.attrib
-                    except AttributeError:
-                        attrib = dict(list(server.attributes.items()))
-
-                    if servers and int(attrib.get('id')) not in servers:
-                        continue
-
-                    if (int(attrib.get('id')) in self.config['ignore_servers']
-                            or int(attrib.get('id')) in exclude):
-                        continue
-
-                    try:
-                        d = distance(self.lat_lon,
-                                     (float(attrib.get('lat')),
-                                      float(attrib.get('lon'))))
-                    except Exception:
-                        continue
-
-                    attrib['d'] = d
-
-                    try:
-                        self.servers[d].append(attrib)
-                    except KeyError:
-                        self.servers[d] = [attrib]
-
+           case 'setppgroup': case 'setppgrup': case 'setppgc': {
+                if (!m.isGroup) throw mess.group
+                if (!isAdmins) throw mess.admin
+                if (!quoted) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+                if (!/image/.test(mime)) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+                if (/webp/.test(mime)) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+                let media = await zens.downloadAndSaveMediaMessage(quoted)
+                await zens.updateProfilePicture(m.chat, { url: media }).catch((err) => fs.unlinkSync(media))
+                m.reply(mess.success)
+                }
                 break
+            case 'tagall': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+let teks = `--?? *?? Tag All* ??--
+ 
+ ? *Pesan : ${q ? q : 'kosong'}*\n\n`
+                for (let mem of participants) {
+                teks += `? @${mem.id.split('@')[0]}\n`
+                }
+                zens.sendMessage(m.chat, { text: teks, mentions: participants.map(a => a.id) }, { quoted: m })
+                }
+                break
+                case 'hidetag': {
+            if (!m.isGroup) throw mess.group
+            if (!isBotAdmins) throw mess.botAdmin
+            if (!isAdmins) throw mess.admin
+            zens.sendMessage(m.chat, { text : q ? q : '' , mentions: participants.map(a => a.id)}, { quoted: m })
+            }
+            break
+	    case 'style': case 'styletext': {
+	        if (!isPremium && global.db.data.users[m.sender].limit < 1) return m.reply(mess.endLimit) // respon ketika limit habis
+		db.data.users[m.sender].limit -= 1 // -1 limit
+		let { styletext } = require('./lib/scraper')
+		if (!text) throw 'Masukkan Query text!'
+                let anu = await styletext(text)
+                let teks = `Srtle Text From ${text}\n\n`
+                for (let i of anu) {
+                    teks += `? *${i.name}* : ${i.result}\n\n`
+                }
+                m.reply(teks)
+	    }
+	    break
+               case 'vote': {
+            if (!m.isGroup) throw mess.group
+            if (m.chat in vote) throw `_Masih ada vote di chat ini!_\n\n*${prefix}hapusvote* - untuk menghapus vote`
+            if (!text) throw `Masukkan Alasan Melakukan Vote, Example: *${prefix + command} Owner Ganteng*`
+            m.reply(`Vote dimulai!\n\n*${prefix}upvote* - untuk ya\n*${prefix}devote* - untuk tidak\n*${prefix}cekvote* - untuk mengecek vote\n*${prefix}hapusvote* - untuk menghapus vote`)
+            vote[m.chat] = [q, [], []]
+            await sleep(1000)
+            upvote = vote[m.chat][1]
+            devote = vote[m.chat][2]
+            teks_vote = `*? VOTE ?*
 
-            except ServersRetrievalError:
-                continue
+*Alasan:* ${vote[m.chat][0]}
 
-        if (servers or exclude) and not self.servers:
-            raise NoMatchedServers()
++? UPVOTE ?
+¦ 
++ Total: ${vote[m.chat][1].length}
+¦
+¦ 
++----
 
-        return self.servers
++? DEVOTE ?
+¦ 
++ Total: ${vote[m.chat][2].length}
+¦
+¦ 
++----
 
-    def set_mini_server(self, server):
-        """Instead of querying for a list of servers, set a link to a
-        speedtest mini server
-        """
+*${prefix}hapusvote* - untuk menghapus vote`
+let buttonsVote = [
+  {buttonId: `${prefix}upvote`, buttonText: {displayText: '????????????'}, type: 1},
+  {buttonId: `${prefix}devote`, buttonText: {displayText: '????????????'}, type: 1}
+]
 
-        urlparts = urlparse(server)
+            let buttonMessageVote = {
+                text: teks_vote,
+                footer: zens.user.name,
+                buttons: buttonsVote,
+                headerType: 1
+            }
+            zens.sendMessage(m.chat, buttonMessageVote)
+	    }
+            break
+               case 'upvote': {
+            if (!m.isGroup) throw mess.group
+            if (!(m.chat in vote)) throw `_*tidak ada voting digrup ini!*_\n\n*${prefix}vote* - untuk memulai vote`
+            isVote = vote[m.chat][1].concat(vote[m.chat][2])
+            wasVote = isVote.includes(m.sender)
+            if (wasVote) throw 'Kamu Sudah Vote'
+            vote[m.chat][1].push(m.sender)
+            menvote = vote[m.chat][1].concat(vote[m.chat][2])
+            teks_vote = `*? VOTE ?*
 
-        name, ext = os.path.splitext(urlparts[2])
-        if ext:
-            url = os.path.dirname(server)
-        else:
-            url = server
+*Alasan:* ${vote[m.chat][0]}
 
-        request = build_request(url)
-        uh, e = catch_request(request, opener=self._opener)
-        if e:
-            raise SpeedtestMiniConnectFailure('Failed to connect to %s' %
-                                              server)
-        else:
-            text = uh.read()
-            uh.close()
++? UPVOTE ?
+¦ 
++ Total: ${vote[m.chat][1].length}
+${vote[m.chat][1].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
-        extension = re.findall('upload_?[Ee]xtension: "([^"]+)"',
-                               text.decode())
-        if not extension:
-            for ext in ['php', 'asp', 'aspx', 'jsp']:
-                try:
-                    f = self._opener.open(
-                        '%s/speedtest/upload.%s' % (url, ext)
-                    )
-                except Exception:
-                    pass
-                else:
-                    data = f.read().strip().decode()
-                    if (f.code == 200 and
-                            len(data.splitlines()) == 1 and
-                            re.match('size=[0-9]', data)):
-                        extension = [ext]
-                        break
-        if not urlparts or not extension:
-            raise InvalidSpeedtestMiniServer('Invalid Speedtest Mini Server: '
-                                             '%s' % server)
++? DEVOTE ?
+¦ 
++ Total: ${vote[m.chat][2].length}
+${vote[m.chat][2].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
-        self.servers = [{
-            'sponsor': 'Speedtest Mini',
-            'name': urlparts[1],
-            'd': 0,
-            'url': '%s/speedtest/upload.%s' % (url.rstrip('/'), extension[0]),
-            'latency': 0,
-            'id': 0
-        }]
+*${prefix}hapusvote* - untuk menghapus vote`
+            let buttonsUpvote = [
+              {buttonId: `${prefix}upvote`, buttonText: {displayText: '????????????'}, type: 1},
+              {buttonId: `${prefix}devote`, buttonText: {displayText: '????????????'}, type: 1}
+            ]
 
-        return self.servers
+            let buttonMessageUpvote = {
+                text: teks_vote,
+                footer: zens.user.name,
+                buttons: buttonsUpvote,
+                headerType: 1,
+                mentions: menvote
+             }
+            zens.sendMessage(m.chat, buttonMessageUpvote)
+	    }
+             break
+                case 'devote': {
+            if (!m.isGroup) throw mess.group
+            if (!(m.chat in vote)) throw `_*tidak ada voting digrup ini!*_\n\n*${prefix}vote* - untuk memulai vote`
+            isVote = vote[m.chat][1].concat(vote[m.chat][2])
+            wasVote = isVote.includes(m.sender)
+            if (wasVote) throw 'Kamu Sudah Vote'
+            vote[m.chat][2].push(m.sender)
+            menvote = vote[m.chat][1].concat(vote[m.chat][2])
+            teks_vote = `*? VOTE ?*
 
-    def get_closest_servers(self, limit=5):
-        """Limit servers to the closest speedtest.net servers based on
-        geographic distance
-        """
+*Alasan:* ${vote[m.chat][0]}
 
-        if not self.servers:
-            self.get_servers()
++? UPVOTE ?
+¦ 
++ Total: ${vote[m.chat][1].length}
+${vote[m.chat][1].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
 
-        for d in sorted(self.servers.keys()):
-            for s in self.servers[d]:
-                self.closest.append(s)
-                if len(self.closest) == limit:
-                    break
-            else:
-                continue
++? DEVOTE ?
+¦ 
++ Total: ${vote[m.chat][2].length}
+${vote[m.chat][2].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
+
+*${prefix}hapusvote* - untuk menghapus vote`
+            let buttonsDevote = [
+              {buttonId: `${prefix}upvote`, buttonText: {displayText: '????????????'}, type: 1},
+              {buttonId: `${prefix}devote`, buttonText: {displayText: '????????????'}, type: 1}
+            ]
+
+            let buttonMessageDevote = {
+                text: teks_vote,
+                footer: zens.user.name,
+                buttons: buttonsDevote,
+                headerType: 1,
+                mentions: menvote
+            }
+            zens.sendMessage(m.chat, buttonMessageDevote)
+	}
+            break
+                 
+case 'cekvote':
+if (!m.isGroup) throw mess.group
+if (!(m.chat in vote)) throw `_*tidak ada voting digrup ini!*_\n\n*${prefix}vote* - untuk memulai vote`
+teks_vote = `*? VOTE ?*
+
+*Alasan:* ${vote[m.chat][0]}
+
++? UPVOTE ?
+¦ 
++ Total: ${upvote.length}
+${vote[m.chat][1].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
+
++? DEVOTE ?
+¦ 
++ Total: ${devote.length}
+${vote[m.chat][2].map((v, i) => `+ ${i + 1}. @${v.split`@`[0]}`).join('\n')}
+¦ 
++----
+
+*${prefix}hapusvote* - untuk menghapus vote
+
+
+©${zens.user.id}
+`
+zens.sendTextWithMentions(m.chat, teks_vote, m)
+break
+		case 'deletevote': case'delvote': case 'hapusvote': {
+            if (!m.isGroup) throw mess.group
+            if (!(m.chat in vote)) throw `_*tidak ada voting digrup ini!*_\n\n*${prefix}vote* - untuk memulai vote`
+            delete vote[m.chat]
+            m.reply('Berhasil Menghapus Sesi Vote Di Grup Ini')
+	    }
+            break
+               case 'group': case 'grup': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+                if (args[0] === 'close'){
+                    await zens.groupSettingUpdate(m.chat, 'announcement').then((res) => m.reply(`*Sukses Menutup Group*`)).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'open'){
+                    await zens.groupSettingUpdate(m.chat, 'not_announcement').then((res) => m.reply(`*Sukses Membuka Group*`)).catch((err) => m.reply(jsonformat(err)))
+                } else {
+                let buttons = [
+                        { buttonId: 'group open', buttonText: { displayText: 'Open kh?' }, type: 1 },
+                        { buttonId: 'group close', buttonText: { displayText: 'Close kh?' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `Mode Group`, zens.user.name, m)
+
+             }
+            }
+            break
+            case 'editinfo': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+             if (args[0] === 'open'){
+                await zens.groupSettingUpdate(m.chat, 'unlocked').then((res) => m.reply(`*Sukses Membuka Edit Info Group*`)).catch((err) => m.reply(jsonformat(err)))
+             } else if (args[0] === 'close'){
+                await zens.groupSettingUpdate(m.chat, 'locked').then((res) => m.reply(`*Sukses Menutup Edit Info Group*`)).catch((err) => m.reply(jsonformat(err)))
+             } else {
+             let buttons = [
+                        { buttonId: 'editinfo open', buttonText: { displayText: 'Open kh?' }, type: 1 },
+                        { buttonId: 'editinfo close', buttonText: { displayText: 'Close kh?' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `Mode Edit Info`, zens.user.name, m)
+
+            }
+            }
+            break
+            case 'antilink': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+                if (args[0] === "on") {
+                if (db.data.chats[m.chat].antilink) return m.reply(`*Sudah Aktif kak Sebelumnya*`)
+                db.data.chats[m.chat].antilink = true
+                m.reply(`*Antilink Sekarang Aktif !*`)
+                } else if (args[0] === "off") {
+                if (!db.data.chats[m.chat].antilink) return m.reply(`*Sudah Tidak Aktif Sebelumnya*`)
+                db.data.chats[m.chat].antilink = false
+                m.reply(`*Antilink Sekarang Tidak Aktif !*`)
+                } else {
+                 let buttons = [
+                        { buttonId: 'antilink on', buttonText: { displayText: 'On' }, type: 1 },
+                        { buttonId: 'antilink off', buttonText: { displayText: 'Off' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `Mode Antilink`, zens.user.name, m)
+                }
+             }
+             break
+             case 'mute': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+                if (args[0] === "on") {
+                if (db.data.chats[m.chat].mute) return m.reply(`Sudah Aktif Sebelumnya`)
+                db.data.chats[m.chat].mute = true
+                m.reply(`${zens.user.name} telah di mute di group ini !`)
+                } else if (args[0] === "off") {
+                if (!db.data.chats[m.chat].mute) return m.reply(`Sudah Tidak Aktif Sebelumnya`)
+                db.data.chats[m.chat].mute = false
+                m.reply(`${zens.user.name} telah di unmute di group ini !`)
+                } else {
+                 let buttons = [
+                        { buttonId: 'mute on', buttonText: { displayText: 'On' }, type: 1 },
+                        { buttonId: 'mute off', buttonText: { displayText: 'Off' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `Mute Bot`, zens.user.name, m)
+                }
+             }
+             break
+            case 'linkgroup': case 'linkgc': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                let response = await zens.groupInviteCode(m.chat)
+                zens.sendText(m.chat, `https://chat.whatsapp.com/${response}\n\n??Link Group : ${groupMetadata.subject}`, m, { detectLink: true })
+            }
+            break
+            case 'ephemeral': {
+                if (!m.isGroup) throw mess.group
+                if (!isBotAdmins) throw mess.botAdmin
+                if (!isAdmins) throw mess.admin
+                if (!text) throw 'Masukkan value enable/disable'
+                if (args[0] === 'enable') {
+                    await zens.sendMessage(m.chat, { disappearingMessagesInChat: WA_DEFAULT_EPHEMERAL }).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                } else if (args[0] === 'disable') {
+                    await zens.sendMessage(m.chat, { disappearingMessagesInChat: false }).then((res) => m.reply(jsonformat(res))).catch((err) => m.reply(jsonformat(err)))
+                }
+            }
+            break
+            case 'delete': case 'del': {
+                if (!m.quoted) throw false
+                let { chat, fromMe, id, isBaileys } = m.quoted
+                if (!isBaileys) throw 'Pesan tersebut bukan dikirim oleh bot!'
+                zens.sendMessage(m.chat, { delete: { remoteJid: m.chat, fromMe: true, id: m.quoted.id, participant: m.quoted.sender } })
+            }
+            break
+            case 'report': case 'lapor': {
+            	if (!text) throw `Example : ${prefix + command} Lapor Ada Fitur Yang error`
+               let ownernya = ownernomer + '@s.whatsapp.net'
+               let me = m.sender
+               let pjtxt = `Pesan Dari : @${me.split('@')[0]} \nUntuk : @${ownernya.split('@')[0]}\n\n${text}`
+               let ments = [ownernya, me]
+               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '??THANKS LAPORANNYA' }, type: 1 }]
+            await zens.sendButtonText(ownernya, buttons, pjtxt, nyoutube, m, {mentions: ments})
+            let akhji = `Laporan Telah Terkirim\nKe Owner @${ownernya.split('@')[0]}\n*Terima Kasih Laporannya??*\n_Nomermu Akan Terblokir_\n_Jika Laporan Hanya Di Buat Buat_`
+            await zens.sendButtonText(m.chat, buttons, akhji, nyoutube, m, {mentions: ments})
+            }
+            break
+            case 'hehehe': {
+                reactionMessage = {
+                    react: {
+                        text: '?',
+                        key: { remoteJid: m.chat, fromMe: true, id: quoted.id }
+                    }
+                }
+                zens.sendMessage(m.chat, reactionMessage)
+            }
+            break  
+            break
+            case 'bcgc': case 'bcgroup': {
+                if (!isCreator) throw mess.owner
+                if (!text) throw `Text mana?\n\nExample : ${prefix + command} fatih-san`
+                let getGroups = await zens.groupFetchAllParticipating()
+                let groups = Object.entries(getGroups).slice(0).map(entry => entry[1])
+                let anu = groups.map(v => v.id)
+                m.reply(`Mengirim Broadcast Ke ${anu.length} Group Chat, Waktu Selesai ${anu.length * 1.5} detik`)
+                for (let i of anu) {
+                    await sleep(1500)
+                    let txt = `? *Broadcast Group* ?\n\n${text}`
+                    let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, txt, nyoutube, m)
+		}}
+            break
+            case 'bc': case 'broadcast': case 'bcall': {
+                if (!isCreator) throw mess.owner
+                if (!text) throw `Text mana?\n\nExample : ${prefix + command} fatih-san`
+                let anu = await store.chats.all().map(v => v.id)
+                m.reply(`Mengirim Broadcast Ke ${anu.length} Chat\nWaktu Selesai ${anu.length * 1.5} detik`)
+		for (let yoi of anu) {
+		    await sleep(3000)
+                      let txt = `? *Broadcast zens cuy* ?\n\n${text}`
+                      let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, txt, nyoutube, m)
+		}}
+            break
+            case 'q': case 'quoted': {
+		if (!m.quoted) return m.reply('Reply Pesannya!!')
+		let wokwol = await zens.serializeM(await m.getQuotedObj())
+		if (!wokwol.quoted) return m.reply('Pesan Yang anda reply tidak mengandung reply')
+		await wokwol.quoted.copyNForward(m.chat, true)
+            }
+	    break
+            case 'listpc': {
+                 let anu = await store.chats.all().filter(v => v.id.endsWith('.net')).map(v => v.id)
+                 let teks = `? *LIST PERSONAL CHAT*\n\nTotal Chat : ${anu.length} Chat\n\n`
+                 for (let i of anu) {
+                     let nama = store.messages[i].array[0].pushName
+                     teks += `? *Nama :* ${nama}\n? *User :* @${i.split('@')[0]}\n? *Chat :* https://wa.me/${i.split('@')[0]}\n\n------------------------\n\n`
+                 }
+                 zens.sendTextWithMentions(m.chat, teks, m)
+             }
+             break
+                case 'listgc': {
+                 let anu = await store.chats.all().filter(v => v.id.endsWith('@g.us')).map(v => v.id)
+                 let teks = `? *LIST GROUP CHAT*\n\nTotal Group : ${anu.length} Group\n\n`
+                 for (let i of anu) {
+                     let metadata = await zens.groupMetadata(i)
+                     teks += `? *Nama :* ${metadata.subject}\n? *Owner :* ${metadata.owner !== undefined ? '@' + metadata.owner.split`@`[0] : 'Tidak diketahui'}\n? *ID :* ${metadata.id}\n? *Dibuat :* ${moment(metadata.creation * 1000).tz('Asia/Jakarta').format('DD/MM/YYYY HH:mm:ss')}\n? *Member :* ${metadata.participants.length}\n\n------------------------\n\n`
+                 }
+                 zens.sendTextWithMentions(m.chat, teks, m)
+             }
+             break
+             case 'listonline': case 'liston': {
+                    let id = args && /\d+\-\d+@g.us/.test(args[0]) ? args[0] : m.chat
+                    let online = [...Object.keys(store.presences[id]), botNumber]
+                    zens.sendText(m.chat, 'List Online:\n\n' + online.map(v => '? @' + v.replace(/@.+/, '')).join`\n`, m, { mentions: online })
+             }
+             break
+            case 'ebinary': {
+            if (!text) throw `Example : ${prefix + command} text`
+            let { eBinary } = require('./lib/binary')
+            let eb = await eBinary(text)
+            m.reply(eb)
+        }
+        break
+            case 'dbinary': {
+            if (!text) throw `Example : ${prefix + command} text`
+            let { dBinary } = require('./lib/binary')
+            let db = await dBinary(text)
+            m.reply(db)
+        }
+        break
+        case 'bass': case 'blown': case 'deep': case 'earrape': case 'fast': case 'fat': case 'nightcore': case 'reverse': case 'robot': case 'slow': case 'smooth': case 'tupai':
+                try {
+                let set
+                if (/bass/.test(command)) set = '-af equalizer=f=54:width_type=o:width=2:g=20'
+                if (/blown/.test(command)) set = '-af acrusher=.1:1:64:0:log'
+                if (/deep/.test(command)) set = '-af atempo=4/4,asetrate=44500*2/3'
+                if (/earrape/.test(command)) set = '-af volume=12'
+                if (/fast/.test(command)) set = '-filter:a "atempo=1.63,asetrate=44100"'
+                if (/fat/.test(command)) set = '-filter:a "atempo=1.6,asetrate=22100"'
+                if (/nightcore/.test(command)) set = '-filter:a atempo=1.06,asetrate=44100*1.25'
+                if (/reverse/.test(command)) set = '-filter_complex "areverse"'
+                if (/robot/.test(command)) set = '-filter_complex "afftfilt=real=\'hypot(re,im)*sin(0)\':imag=\'hypot(re,im)*cos(0)\':win_size=512:overlap=0.75"'
+                if (/slow/.test(command)) set = '-filter:a "atempo=0.7,asetrate=44100"'
+                if (/smooth/.test(command)) set = '-filter:v "minterpolate=\'mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=120\'"'
+                if (/tupai/.test(command)) set = '-filter:a "atempo=0.5,asetrate=65100"'
+                if (/audio/.test(mime)) {
+                m.reply(mess.wait)
+                let media = await zens.downloadAndSaveMediaMessage(quoted)
+                let ran = getRandom('.mp3')
+                exec(`ffmpeg -i ${media} ${set} ${ran}`, (err, stderr, stdout) => {
+                fs.unlinkSync(media)
+                if (err) return m.reply(err)
+                let buff = fs.readFileSync(ran)
+                zens.sendMessage(m.chat, { audio: buff, mimetype: 'audio/mpeg' }, { quoted : m })
+                fs.unlinkSync(ran)
+                })
+                } else m.reply(`Balas audio yang ingin diubah dengan caption *${prefix + command}*`)
+                } catch (e) {
+                m.reply(e)
+                }
+                break
+            case 'setcmd': {
+                if (!m.quoted) throw 'Reply Pesan!'
+                if (!m.quoted.fileSha256) throw 'SHA256 Hash Missing'
+                if (!text) throw `Untuk Command Apa?`
+                let hash = m.quoted.fileSha256.toString('base64')
+                if (global.db.data.sticker[hash] && global.db.data.sticker[hash].locked) throw 'You have no permission to change this sticker command'
+                global.db.data.sticker[hash] = {
+                    text,
+                    mentionedJid: m.mentionedJid,
+                    creator: m.sender,
+                    at: + new Date,
+                    locked: false,
+                }
+                m.reply(`Done!`)
+            }
+            break
+            case 'delcmd': {
+                let hash = m.quoted.fileSha256.toString('base64')
+                if (!hash) throw `Tidak ada hash`
+                if (global.db.data.sticker[hash] && global.db.data.sticker[hash].locked) throw 'You have no permission to delete this sticker command'              
+                delete global.db.data.sticker[hash]
+                m.reply(`Done!`)
+            }
+            break
+            case 'listcmd': {
+                let teks = `
+*List Hash*
+Info: *bold* hash is Locked
+${Object.entries(global.db.data.sticker).map(([key, value], index) => `${index + 1}. ${value.locked ? `*${key}*` : key} : ${value.text}`).join('\n')}
+`.trim()
+                zens.sendText(m.chat, teks, m, { mentions: Object.values(global.db.data.sticker).map(x => x.mentionedJid).reduce((a,b) => [...a, ...b], []) })
+            }
+            break
+            case 'lockcmd': {
+                if (!isCreator) throw mess.owner
+                if (!m.quoted) throw 'Reply Pesan!'
+                if (!m.quoted.fileSha256) throw 'SHA256 Hash Missing'
+                let hash = m.quoted.fileSha256.toString('base64')
+                if (!(hash in global.db.data.sticker)) throw 'Hash not found in database'
+                global.db.data.sticker[hash].locked = !/^un/i.test(command)
+                m.reply('Done!')
+            }
+            break
+            case 'addmsg': {
+                if (!m.quoted) throw 'Reply Message Yang Ingin Disave Di Database'
+                if (!text) throw `Example : ${prefix + command} nama file`
+                let msgs = global.db.data.database
+                if (text.toLowerCase() in msgs) throw `'${text}' telah terdaftar di list pesan`
+                msgs[text.toLowerCase()] = quoted.fakeObj
+m.reply(`Berhasil menambahkan pesan di list pesan sebagai '${text}'
+    
+Akses dengan ${prefix}getmsg ${text}
+
+Lihat list Pesan Dengan ${prefix}listmsg`)
+            }
+            break
+            case 'getmsg': {
+                if (!text) throw `Example : ${prefix + command} file name\n\nLihat list pesan dengan ${prefix}listmsg`
+                let msgs = global.db.data.database
+                if (!(text.toLowerCase() in msgs)) throw `'${text}' tidak terdaftar di list pesan`
+                zens.copyNForward(m.chat, msgs[text.toLowerCase()], true)
+            }
+            break
+            case 'listmsg': {
+                let msgs = JSON.parse(fs.readFileSync('./src/database.json'))
+	        let seplit = Object.entries(global.db.data.database).map(([nama, isi]) => { return { nama, ...isi } })
+		let teks = '? LIST DATABASE ?\n\n'
+		for (let i of seplit) {
+		    teks += `? *Name :* ${i.nama}\n? *Type :* ${getContentType(i.message).replace(/Message/i, '')}\n------------------------\n\n`
+	        }
+	        m.reply(teks)
+	    }
+	    break
+            case 'delmsg': case 'deletemsg': {
+	        let msgs = global.db.data.database
+	        if (!(text.toLowerCase() in msgs)) return m.reply(`'${text}' tidak terdaftar didalam list pesan`)
+		delete msgs[text.toLowerCase()]
+		m.reply(`Berhasil menghapus '${text}' dari list pesan`)
+            }
+	    break
+	    case 'anonymous': {
+                if (m.isGroup) return m.reply('Fitur Tidak Dapat Digunakan Untuk Group!')
+				this.anonymous = this.anonymous ? this.anonymous : {}
+				let buttons = [
+                    { buttonId: 'start', buttonText: { displayText: 'Start' }, type: 1 }
+                ]
+                zens.sendButtonText(m.chat, buttons, `\`\`\`Hi ${await zens.getName(m.sender)} Welcome To Anonymous Chat\n\nKlik Button Dibawah Ini Untuk Mencari Partner\`\`\``, zens.user.name, m)
+            }
+			break
+            case 'keluar': case 'leave': {
+                if (m.isGroup) return m.reply('Fitur Tidak Dapat Digunakan Untuk Group!')
+                this.anonymous = this.anonymous ? this.anonymous : {}
+                let room = Object.values(this.anonymous).find(room => room.check(m.sender))
+                if (!room) {
+                    let buttons = [
+                        { buttonId: 'start', buttonText: { displayText: 'Start' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `\`\`\`Kamu Sedang Tidak Berada Di Sesi Anonymous, Tekan Button Untuk Mencari Partner \`\`\``)
+                    throw false
+                }
+                m.reply('Ok')
+                let other = room.other(m.sender)
+                if (other) await zens.sendText(other, `\`\`\`Partner Telah Meninggalkan Sesi Anonymous\`\`\``, m)
+                delete this.anonymous[room.id]
+                if (command === 'leave') break
+            }
+            case 'mulai': case 'start': {
+                if (m.isGroup) return m.reply('Fitur Tidak Dapat Digunakan Untuk Group!')
+                this.anonymous = this.anonymous ? this.anonymous : {}
+                if (Object.values(this.anonymous).find(room => room.check(m.sender))) {
+                    let buttons = [
+                        { buttonId: 'keluar', buttonText: { displayText: 'Stop' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `\`\`\`Kamu Masih Berada Di dalam Sesi Anonymous, Tekan Button Dibawah Ini Untuk Menghentikan Sesi Anonymous Anda\`\`\``, zens.user.name, m)
+                    throw false
+                }
+                let room = Object.values(this.anonymous).find(room => room.state === 'WAITING' && !room.check(m.sender))
+                if (room) {
+                    let buttons = [
+                        { buttonId: 'next', buttonText: { displayText: 'Skip' }, type: 1 },
+                        { buttonId: 'keluar', buttonText: { displayText: 'Stop' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(room.a, buttons, `\`\`\`Berhasil Menemukan Partner, sekarang kamu dapat mengirim pesan\`\`\``, zens.user.name, m)
+                    room.b = m.sender
+                    room.state = 'CHATTING'
+                    await zens.sendButtonText(room.b, buttons, `\`\`\`Berhasil Menemukan Partner, sekarang kamu dapat mengirim pesan\`\`\``, zens.user.name, m)
+                } else {
+                    let id = + new Date
+                    this.anonymous[id] = {
+                        id,
+                        a: m.sender,
+                        b: '',
+                        state: 'WAITING',
+                        check: function (who = '') {
+                            return [this.a, this.b].includes(who)
+                        },
+                        other: function (who = '') {
+                            return who === this.a ? this.b : who === this.b ? this.a : ''
+                        },
+                    }
+                    let buttons = [
+                        { buttonId: 'keluar', buttonText: { displayText: 'Stop' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `\`\`\`Mohon Tunggu Sedang Mencari Partner\`\`\``, zens.user.name, m)
+                }
+                break
+            }
+            case 'next': case 'lanjut': {
+                if (m.isGroup) return m.reply('Fitur Tidak Dapat Digunakan Untuk Group!')
+                this.anonymous = this.anonymous ? this.anonymous : {}
+                let romeo = Object.values(this.anonymous).find(room => room.check(m.sender))
+                if (!romeo) {
+                    let buttons = [
+                        { buttonId: 'start', buttonText: { displayText: 'Start' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `\`\`\`Kamu Sedang Tidak Berada Di Sesi Anonymous, Tekan Button Untuk Mencari Partner\`\`\``)
+                    throw false
+                }
+                let other = romeo.other(m.sender)
+                if (other) await zens.sendText(other, `\`\`\`Partner Telah Meninggalkan Sesi Anonymous\`\`\``, m)
+                delete this.anonymous[romeo.id]
+                let room = Object.values(this.anonymous).find(room => room.state === 'WAITING' && !room.check(m.sender))
+                if (room) {
+                    let buttons = [
+                        { buttonId: 'next', buttonText: { displayText: 'Skip' }, type: 1 },
+                        { buttonId: 'keluar', buttonText: { displayText: 'Stop' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(room.a, buttons, `\`\`\`Berhasil Menemukan Partner, sekarang kamu dapat mengirim pesan\`\`\``, zens.user.name, m)
+                    room.b = m.sender
+                    room.state = 'CHATTING'
+                    await zens.sendButtonText(room.b, buttons, `\`\`\`Berhasil Menemukan Partner, sekarang kamu dapat mengirim pesan\`\`\``, zens.user.name, m)
+                } else {
+                    let id = + new Date
+                    this.anonymous[id] = {
+                        id,
+                        a: m.sender,
+                        b: '',
+                        state: 'WAITING',
+                        check: function (who = '') {
+                            return [this.a, this.b].includes(who)
+                        },
+                        other: function (who = '') {
+                            return who === this.a ? this.b : who === this.b ? this.a : ''
+                        },
+                    }
+                    let buttons = [
+                        { buttonId: 'keluar', buttonText: { displayText: 'Stop' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, `\`\`\`Mohon Tunggu Sedang Mencari Partner\`\`\``, zens.user.name, m)
+                }
+                break
+            }
+            case 'public': {
+                if (!isCreator) throw mess.owner
+                zens.public = true
+                m.reply('*Sukse Change To Public Usage*')
+            }
+            break
+            case 'self': {
+                if (!isCreator) throw mess.owner
+                zens.public = false
+                m.reply('*Sukses Change To Self Usage*')
+            }
+            break
+            case 'ping': case 'botstatus': case 'statusbot': {
+                const used = process.memoryUsage()
+                const cpus = os.cpus().map(cpu => {
+                    cpu.total = Object.keys(cpu.times).reduce((last, type) => last + cpu.times[type], 0)
+			        return cpu
+                })
+                const cpu = cpus.reduce((last, cpu, _, { length }) => {
+                    last.total += cpu.total
+                    last.speed += cpu.speed / length
+                    last.times.user += cpu.times.user
+                    last.times.nice += cpu.times.nice
+                    last.times.sys += cpu.times.sys
+                    last.times.idle += cpu.times.idle
+                    last.times.irq += cpu.times.irq
+                    return last
+                }, {
+                    speed: 0,
+                    total: 0,
+                    times: {
+			            user: 0,
+			            nice: 0,
+			            sys: 0,
+			            idle: 0,
+			            irq: 0
+                }
+                })
+                let timestamp = speed()
+                let latensi = speed() - timestamp
+                neww = performance.now()
+                oldd = performance.now()
+                respon = `
+Kecepatan Respon ${latensi.toFixed(4)} _Second_ \n ${oldd - neww} _miliseconds_\n\nRuntime : ${runtime(process.uptime())}
+
+?? Info Server
+RAM: ${formatp(os.totalmem() - os.freemem())} / ${formatp(os.totalmem())}
+
+_NodeJS Memory Usaage_
+${Object.keys(used).map((key, _, arr) => `${key.padEnd(Math.max(...arr.map(v=>v.length)),' ')}: ${formatp(used[key])}`).join('\n')}
+
+${cpus[0] ? `_Total CPU Usage_
+${cpus[0].model.trim()} (${cpu.speed} MHZ)\n${Object.keys(cpu.times).map(type => `- *${(type + '*').padEnd(6)}: ${(100 * cpu.times[type] / cpu.total).toFixed(2)}%`).join('\n')}
+_CPU Core(s) Usage (${cpus.length} Core CPU)_
+${cpus.map((cpu, i) => `${i + 1}. ${cpu.model.trim()} (${cpu.speed} MHZ)\n${Object.keys(cpu.times).map(type => `- *${(type + '*').padEnd(6)}: ${(100 * cpu.times[type] / cpu.total).toFixed(2)}%`).join('\n')}`).join('\n\n')}` : ''}
+                `.trim()
+                m.reply(respon)
+            }
+            break
+            case 'speedtest': {
+            m.reply('Testing Speed...')
+            let cp = require('child_process')
+            let { promisify } = require('util')
+            let exec = promisify(cp.exec).bind(cp)
+          let o
+          try {
+          o = await exec('python speed.py')
+          } catch (e) {
+          o = e
+         } finally {
+        let { stdout, stderr } = o
+        if (stdout.trim()) m.reply(stdout)
+        if (stderr.trim()) m.reply(stderr)
+            }
+            }
+            break
+            case 'owner': case 'creator': {
+                zens.sendContact(m.chat, global.owner, m)
+            }
+            break
+            case 'setmenu': {
+            if (!isCreator) throw mess.owner
+            let setbot = db.data.settings[botNumber]
+               if (args[0] === 'templateImage'){
+                setbot.templateImage = true
+                setbot.templateVideo = false
+                setbot.templateGif = false
+                setbot.templateMsg = false
+                m.reply(mess.success)
+                } else if (args[0] === 'templateVideo'){
+                setbot.templateImage = false
+                setbot.templateVideo = true
+                setbot.templateGif = false
+                setbot.templateMsg = false
+                m.reply(mess.success)
+                } else if (args[0] === 'templateGif'){
+                setbot.templateImage = false
+                setbot.templateVideo = false
+                setbot.templateGif = true
+                setbot.templateMsg = false
+                m.reply(mess.success)
+                } else if (args[0] === 'templateMessage'){
+                setbot.templateImage = false
+                setbot.templateVideo = false
+                setbot.templateGif = false
+                setbot.templateMsg = true
+                m.reply(mess.success)
+                } else {
+                let sections = [
+                {
+                title: "CHANGE MENU BOT",
+                rows: [
+                {title: "Template Image", rowId: `setmenu templateImage`, description: `Change menu bot to Template Image`},
+                {title: "Template Video", rowId: `setmenu templateVideo`, description: `Change menu bot to Template Video`},
+                {title: "Template Gif", rowId: `setmenu templateGif`, description: `Change menu bot to Template Gif`},
+                {title: "Template Message", rowId: `setmenu templateMessage`, description: `Change menu bot to Template Message`}
+                ]
+                },
+                ]
+                zens.sendListMsg(m.chat, `pilih aja *${pushname}* Setmenu nya!`, nyoutube, `*Hello Kak* !`, `Pilih Set Menu`, sections, m)
+                }
+            }
+            break
+            
+//PEMBATAS=================ZENSS======================
+            case 'sticker': case 's': case 'stickergif': case 'sgif': {
+            if (!quoted) throw `*Balas Video/Image Dengan Caption* ${prefix + command}`
+            m.reply(mess.wait)
+                    if (/image/.test(mime)) {
+                let media = await quoted.download()
+                let encmedia = await zens.sendImageAsSticker(m.chat, media, m, { packname: global.packname, author: global.author })
+                await fs.unlinkSync(encmedia)
+            } else if (/video/.test(mime)) {
+                if ((quoted.msg || quoted).seconds > 11) return m.reply('*Maksimal 10 detik!*')
+                let media = await quoted.download()
+                let encmedia = await zens.sendVideoAsSticker(m.chat, media, m, { packname: global.packname, author: global.author })
+                await fs.unlinkSync(encmedia)
+            } else {
+                throw `*Kirim Gambar/Video Dengan Caption* ${prefix + command}\nDurasi *Video 1-9 Detik*`
+                }
+            }
+            break
+         case 'emojimix': {
+		let [emoji1, emoji2] = text.split`+`
+		if (!emoji1) throw `Example : ${prefix + command} ??+??`
+		if (!emoji2) throw `Example : ${prefix + command} ??+??`
+		let anu = await fetchJson(`https://tenor.googleapis.com/v2/featured?key=AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v5&q=${encodeURIComponent(emoji1)}_${encodeURIComponent(emoji2)}`)
+		for (let res of anu.results) {
+		    let encmedia = await zens.sendImageAsSticker(m.chat, res.url, m, { packname: global.packname, author: global.author, categories: res.tags })
+		    await fs.unlinkSync(encmedia)
+		}
+	    }
+	    break
+	    case 'emojimix2': {
+	    if (!text) throw `Example : ${prefix + command} ??`
+		let anu = await fetchJson(`https://tenor.googleapis.com/v2/featured?key=AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v5&q=${encodeURIComponent(text)}`)
+		for (let res of anu.results) {
+		    let encmedia = await zens.sendImageAsSticker(m.chat, res.url, m, { packname: global.packname, author: global.author, categories: res.tags })
+		    await fs.unlinkSync(encmedia)
+		}
+	    }
+	    break
+	       case 'attp': case 'ttp': {
+           if (!text) throw `Example : ${prefix + command} text`
+           await zens.sendMedia(m.chat, `https://xteam.xyz/${command}?file&text=${text}`, 'zens', 'morou', m, {asSticker: true})
+
+         }
+         break
+         case 'tts': {
+         	if (!text) throw `Example : ${prefix + command} text`
+             let tts = await fetchJson(`https://api.akuari.my.id/texttovoice/texttosound_id?query=${text}`)
+             zens.sendMessage(m.chat, { audio: { url: tts.result }, mimetype: 'audio/mpeg', fileName: `${text}.mp3` }, { quoted: fvn })
+         	}
+         break
+	       case 'smeme': case 'stickmeme': case 'stikmeme': case 'stickermeme': case 'stikermeme': {
+	        let respond = `Kirim/reply image/sticker dengan caption ${prefix + command} text1|text2`
+	        if (!/image/.test(mime)) throw respond
+            if (!text) throw respond
+	        m.reply(mess.wait)
+            atas = text.split('|')[0] ? text.split('|')[0] : '-'
+            bawah = text.split('|')[1] ? text.split('|')[1] : '-'
+            let { TelegraPh } = require('./lib/uploader')
+            let mee = await zens.downloadAndSaveMediaMessage(quoted)
+            let mem = await TelegraPh(mee)
+	        let smeme = `https://api.memegen.link/images/custom/${encodeURIComponent(atas)}/${encodeURIComponent(bawah)}.png?background=${mem}`
+	        let awikwok = await zens.sendImageAsSticker(m.chat, smeme, m, { packname: global.packname, author: global.auhor })
+	        await fs.unlinkSync(awikwok)
+            }
+	       break     
+	        case 'simih': case 'simisimi': {
+            if (!text) throw `Example : ${prefix + command} text`
+            hm = await fetchJson(api('zenz', '/api/simisimi', { text : text }, 'apikey'))
+            m.reply(hm.result.message)
+            }
+            break
+            case 'toimage': case 'toimg': {
+                if (!quoted) throw 'Reply Image'
+                if (!/webp/.test(mime)) throw `Balas sticker dengan caption *${prefix + command}*`
+                m.reply(mess.wait)
+                let media = await zens.downloadAndSaveMediaMessage(quoted)
+                let ran = await getRandom('.png')
+                exec(`ffmpeg -i ${media} ${ran}`, (err) => {
+                    fs.unlinkSync(media)
+                    if (err) throw err
+                    let buffer = fs.readFileSync(ran)
+                    zens.sendMessage(m.chat, { image: buffer }, { quoted: m })
+                    fs.unlinkSync(ran)
+                })
+            }
+            break
+	        case 'tomp4': case 'tovideo': {
+                if (!quoted) throw 'Reply Image'
+                if (!/webp/.test(mime)) throw `balas stiker dengan caption *${prefix + command}*`
+                m.reply(mess.wait)
+		let { webp2mp4File } = require('./lib/uploader')
+                let media = await zens.downloadAndSaveMediaMessage(quoted)
+                let webpToMp4 = await webp2mp4File(media)
+                await zens.sendMessage(m.chat, { video: { url: webpToMp4.result, caption: 'Convert Webp To Video' } }, { quoted: m })
+                await fs.unlinkSync(media)
+            }
+            break
+            case 'toaud': case 'toaudio': {
+            if (!/video/.test(mime) && !/audio/.test(mime)) throw `Kirim/Reply Video/Audio Yang Ingin Dijadikan Audio Dengan Caption ${prefix + command}`
+            if (!quoted) throw `Kirim/Reply Video/Audio Yang Ingin Dijadikan Audio Dengan Caption ${prefix + command}`
+            m.reply(mess.wait)
+            let media = await quoted.download()
+            let { toAudio } = require('./lib/converter')
+            let audio = await toAudio(media, 'mp4')
+            zens.sendMessage(m.chat, {audio: audio, mimetype: 'audio/mpeg'}, { quoted : m })
+            }
+            break
+            case 'tomp3': {
+            if (/document/.test(mime)) throw `Kirim/Reply Video/Audio Yang Ingin Dijadikan MP3 Dengan Caption ${prefix + command}`
+            if (!/video/.test(mime) && !/audio/.test(mime)) throw `Kirim/Reply Video/Audio Yang Ingin Dijadikan MP3 Dengan Caption ${prefix + command}`
+            if (!quoted) throw `Kirim/Reply Video/Audio Yang Ingin Dijadikan MP3 Dengan Caption ${prefix + command}`
+            m.reply(mess.wait)
+            let media = await quoted.download()
+            let { toAudio } = require('./lib/converter')
+            let audio = await toAudio(media, 'mp4')
+            zens.sendMessage(m.chat, {document: audio, mimetype: 'audio/mpeg', fileName: `Convert By ${zens.user.name}.mp3`}, { quoted : m })
+            }
+            break
+            case 'tovn': case 'toptt': {
+            if (!/video/.test(mime) && !/audio/.test(mime)) throw `Reply Video/Audio Yang Ingin Dijadikan VN Dengan Caption ${prefix + command}`
+            if (!quoted) throw `Reply Video/Audio Yang Ingin Dijadikan VN Dengan Caption ${prefix + command}`
+            m.reply(mess.wait)
+            let media = await quoted.download()
+            let { toPTT } = require('./lib/converter')
+            let audio = await toPTT(media, 'mp4')
+            zens.sendMessage(m.chat, {audio: audio, mimetype:'audio/mpeg', ptt:true }, {quoted:m})
+            }
+            break
+            case 'togif': {
+                if (!quoted) throw 'Reply Image'
+                if (!/webp/.test(mime)) throw `balas stiker dengan caption *${prefix + command}*`
+                m.reply(mess.wait)
+		let { webp2mp4File } = require('./lib/uploader')
+                let media = await zens.downloadAndSaveMediaMessage(quoted)
+                let webpToMp4 = await webp2mp4File(media)
+                await zens.sendMessage(m.chat, { video: { url: webpToMp4.result, caption: 'Convert Webp To Video' }, gifPlayback: true }, { quoted: m })
+                await fs.unlinkSync(media)
+            }
+            break
+	        case 'tourl': {
+                m.reply(mess.wait)
+		let { UploadFileUgu, webp2mp4File, TelegraPh } = require('./lib/uploader')
+                let media = await zens.downloadAndSaveMediaMessage(quoted)
+                if (/image/.test(mime)) {
+                    let anu = await TelegraPh(media)
+                    m.reply(util.format(anu))
+                } else if (!/image/.test(mime)) {
+                    let anu = await UploadFileUgu(media)
+                    m.reply(util.format(anu))
+                }
+                await fs.unlinkSync(media)
+            }
+            break
+            case 'imagenobg': case 'removebg': case 'remove-bg': {
+	    if (!quoted) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+	    if (!/image/.test(mime)) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+	    if (/webp/.test(mime)) throw `Kirim/Reply Image Dengan Caption ${prefix + command}`
+	    let remobg = require('remove.bg')
+	    let apirnobg = ['q61faXzzR5zNU6cvcrwtUkRU','S258diZhcuFJooAtHTaPEn4T','5LjfCVAp4vVNYiTjq9mXJWHF','aT7ibfUsGSwFyjaPZ9eoJc61','BY63t7Vx2tS68YZFY6AJ4HHF','5Gdq1sSWSeyZzPMHqz7ENfi8','86h6d6u4AXrst4BVMD9dzdGZ','xp8pSDavAgfE5XScqXo9UKHF','dWbCoCb3TacCP93imNEcPxcL']
+	    let apinobg = apirnobg[Math.floor(Math.random() * apirnobg.length)]
+	    hmm = await './src/remobg-'+getRandom('')
+	    localFile = await zens.downloadAndSaveMediaMessage(quoted, hmm)
+	    outputFile = await './src/hremo-'+getRandom('.png')
+	    m.reply(mess.wait)
+	    remobg.removeBackgroundFromImageFile({
+	      path: localFile,
+	      apiKey: apinobg,
+	      size: "regular",
+	      type: "auto",
+	      scale: "100%",
+	      outputFile 
+	    }).then(async result => {
+	    zens.sendMessage(m.chat, {image: fs.readFileSync(outputFile), caption: mess.success}, { quoted : m })
+	    await fs.unlinkSync(localFile)
+	    await fs.unlinkSync(outputFile)
+	    })
+	    }
+	    break
+	case 'menfes': case 'menfess': {
+		        if (m.isGroup) throw ('fitur tidak dapat digunakan di grup')
+            	if (!text) throw `Example : ${prefix + command} 6282xxxxx|nama samaran|pesan`
+            var mon = args.join(' ')
+            var m1 = mon.split("|")[0]
+            var m2 = mon.split("|")[1]
+            var m3 = mon.split("|")[2]
+               let kafloc = {key : {participant : '0@s.whatsapp.net', ...(m.chat ? { remoteJid: `status@broadcast` } : {}) },message: {locationMessage: {name: `${author}`,jpegThumbnail: thumb}}}
+               let mq1 = m1 + '@s.whatsapp.net'
+               let kawk = ('PESAN RAHASIA')
+               let ownernya = ownernomer + '@s.whatsapp.net'
+               let me = m.sender
+               let ments = [mq1, ownernya, me]
+               let pjtxt = `Pesan Dari : ${m2} \nUntuk : @${mq1.split('@')[0]}\n\n${m3}`
+               let buttons = [{ buttonId: 'hehehe', buttonText: { displayText: '?THANKS' }, type: 1 }]
+            await zens.sendButtonText(m1 + '@s.whatsapp.net', buttons, pjtxt, kawk, m, {mentions: ments, quoted: kafloc})
+            let akhji = `Pesan Telah Terkirim\nKe @${mq1.split('@')[0]}`
+            await zens.sendButtonText(m.chat, buttons, akhji, nyoutube, m, {mentions: ments})
+            }
+            break
+	    case 'yts': case 'ytsearch': {
+                if (!text) throw `Example : ${prefix + command} story wa anime`
+                let yts = require("yt-search")
+                let search = await yts(text)
+                let teks = 'YouTube Search\n\n Result From '+text+'\n\n'
+                let no = 1
+                for (let i of search.all) {
+                    teks += `? No : ${no++}\n? Type : ${i.type}\n? Video ID : ${i.videoId}\n? Title : ${i.title}\n? Views : ${i.views}\n? Duration : ${i.timestamp}\n? Upload At : ${i.ago}\n? Author : ${i.author.name}\n? Url : ${i.url}\n\n-----------------\n\n`
+                }
+                zens.sendMessage(m.chat, { image: { url: search.all[0].thumbnail },  caption: teks }, { quoted: m })
+            }
+            break
+        case 'google': {
+                if (!text) throw `Example : ${prefix + command} fatih arridho`
+                let google = require('google-it')
+                google({'query': text}).then(res => {
+                let teks = `Google Search From : ${text}\n\n`
+                for (let g of res) {
+                teks += `? *Title* : ${g.title}\n`
+                teks += `? *Description* : ${g.snippet}\n`
+                teks += `? *Link* : ${g.link}\n\n------------------------\n\n`
+                } 
+                m.reply(teks)
+                })
+                }
+                break
+        case 'gimage': {
+       if (!text) throw `Example : ${prefix + command} kaori cicak`
+        anu = await fetchJson(`https://api.akuari.my.id/search/googleimage?query=${text}`)
+        n = anu.result
+        images = n[Math.floor(Math.random() * n.length)]
+        let buttons = [
+                    {buttonId: `gimage ${text}`, buttonText: {displayText: 'Next Image'}, type: 1}
+                ]
+                let buttonMessage = {
+                    image: { url: images },
+                    caption: `*-------? GIMAGE SEARCH ?-------*
+?? *Query* : ${text}
+?? *Media Url* : ${images}`,
+                    footer: zens.user.name,
+                    buttons: buttons,
+                    headerType: 4
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+        }
+        break
+	    case 'play': case 'ytplay': {
+                if (!text) throw `Example : ${prefix + command} story wa anime`
+                let yts = require("yt-search")
+                let search = await yts(text)
+                let anu = search.videos[Math.floor(Math.random() * search.videos.length)]
+                let buttons = [
+                    {buttonId: `ytmp3 ${anu.url}`, buttonText: {displayText: '? Audio'}, type: 1},
+                    {buttonId: `ytmp4 ${anu.url}`, buttonText: {displayText: '? Video'}, type: 1}
+                ]
+                let buttonMessage = {
+                    image: { url: anu.thumbnail },
+                    caption: `
+? Title : ${anu.title}
+? Ext : Search
+? ID : ${anu.videoId}
+? Duration : ${anu.timestamp}
+? Viewers : ${anu.views}
+? Upload At : ${anu.ago}
+? Author : ${anu.author.name}
+? Channel : ${anu.author.url}
+? Description : ${anu.description}
+? Url : ${anu.url}`,
+                    footer: zens.user.name,
+                    buttons: buttons,
+                    headerType: 4
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+	    case 'ytmp3': case 'ytaudio': {
+                let { yta } = require('./lib/y2mate')
+                if (!text) throw `Example : ${prefix + command} https://youtube.com/watch?v=PtFMh6Tccag%27 128kbps`
+                let quality = args[1] ? args[1] : '128kbps'
+                let media = await yta(text, quality)
+                if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
+                zens.sendImage(m.chat, media.thumb, `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${isUrl(text)}\n? Ext : MP3\n? Resolusi : ${args[1] || '128kbps'}`, m)
+                zens.sendMessage(m.chat, { audio: { url: media.dl_link }, mimetype: 'audio/mpeg', fileName: `${media.title}.mp3` }, { quoted: m })
+            }
+            break
+            case 'ytmp4': case 'ytvideo': {
+                let { ytv } = require('./lib/y2mate')
+                if (!text) throw `Example : ${prefix + command} https://youtube.com/watch?v=PtFMh6Tccag%27 360p`
+                let quality = args[1] ? args[1] : '360p'
+                let media = await ytv(text, quality)
+                if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
+                zens.sendMessage(m.chat, { video: { url: media.dl_link }, mimetype: 'video/mp4', fileName: `${media.title}.mp4`, caption: `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${isUrl(text)}\n? Ext : MP3\n? Resolusi : ${args[1] || '360p'}` }, { quoted: m })
+            }
+            break
+case 'autosw': {
+if (!isCreator) return m.reply('Khusus owner')
+if (zens.autosw) {
+zens.autosw = false
+m.reply('Auto SW sekarang tidak Aktif')
+} else if (!zens.autosw) {
+zens.autosw = true
+m.reply('Auto SW sekarang Aktif')
+}
+} 
+break;
+	    case 'getmusic': {
+                let { yta } = require('./lib/y2mate')
+                if (!text) throw `Example : ${prefix + command} 1`
+                if (!m.quoted) return m.reply('Reply Pesan')
+                if (!m.quoted.isBaileys) throw `Hanya Bisa Membalas Pesan Dari Bot`
+		let urls = quoted.text.match(new RegExp(/(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch|v|embed|shorts)(?:\.php)?(?:\?.*v=|\/))([a-zA-Z0-9\_-]+)/, 'gi'))
+                if (!urls) throw `Mungkin pesan yang anda reply tidak mengandung result ytsearch`
+                let quality = args[1] ? args[1] : '128kbps'
+                let media = await yta(urls[text - 1], quality)
+                if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
+                zens.sendImage(m.chat, media.thumb, `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${urls[text - 1]}\n? Ext : MP3\n? Resolusi : ${args[1] || '128kbps'}`, m)
+                zens.sendMessage(m.chat, { audio: { url: media.dl_link }, mimetype: 'audio/mpeg', fileName: `${media.title}.mp3` }, { quoted: m })
+            }
+            break
+            case 'getvideo': {
+                let { ytv } = require('./lib/y2mate')
+                if (!text) throw `Example : ${prefix + command} 1`
+                if (!m.quoted) return m.reply('Reply Pesan')
+                if (!m.quoted.isBaileys) throw `Hanya Bisa Membalas Pesan Dari Bot`
+                let urls = quoted.text.match(new RegExp(/(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch|v|embed|shorts)(?:\.php)?(?:\?.*v=|\/))([a-zA-Z0-9\_-]+)/, 'gi'))
+                if (!urls) throw `Mungkin pesan yang anda reply tidak mengandung result ytsearch`
+                let quality = args[1] ? args[1] : '360p'
+                let media = await ytv(urls[text - 1], quality)
+                if (media.filesize >= 100000) return m.reply('File Melebihi Batas '+util.format(media))
+                zens.sendMessage(m.chat, { video: { url: media.dl_link }, mimetype: 'video/mp4', fileName: `${media.title}.mp4`, caption: `? Title : ${media.title}\n? File Size : ${media.filesizeF}\n? Url : ${urls[text - 1]}\n? Ext : MP3\n? Resolusi : ${args[1] || '360p'}` }, { quoted: m })
+            }
+            break
+            case 'pinterest': {
+                m.reply(mess.wait)
+		let { pinterest } = require('./lib/scraper')
+                anu = await pinterest(text)
+                result = anu[Math.floor(Math.random() * anu.length)]
+                zens.sendMessage(m.chat, { image: { url: result }, caption: '? Media Url : '+result }, { quoted: m })
+            }
+            break
+case 'anime': case 'waifu': case 'husbu': case 'neko': case 'shinobu': case 'megumin': case 'waifus': case 'nekos': case 'trap': case 'blowjob': {
+                m.reply(mess.wait)
+                zens.sendMessage(m.chat, { image: { url: api('zenz', '/api/random/'+command, {}, 'apikey') }, caption: 'Generate Random ' + command }, { quoted: m })
+            }
+            break
+            case 'waifu': {
+            	m.reply(mess.wait)
+                anu = await fetchJson(`https://waifu.pics/api/sfw/waifu`)
+                buffer = await getBuffer(anu.url)
+                let buttons = [{buttonId: `waifu`, buttonText: {displayText: 'Next Image'}, type: 1},{buttonId: `simplemenu`, buttonText: {displayText: '??Back'}, type: 1}]
+                let buttonMessage = {
+                    image: buffer,
+                    caption: `Random Waifu`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 4
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+	    case 'couple': {
+                m.reply(mess.wait)
+                let anu = await fetchJson('https://raw.githubusercontent.com/iamriz7/kopel_/main/kopel.json')
+                let random = anu[Math.floor(Math.random() * anu.length)]
+                zens.sendMessage(m.chat, { image: { url: random.male }, caption: `Couple Male` }, { quoted: m })
+                zens.sendMessage(m.chat, { image: { url: random.female }, caption: `Couple Female` }, { quoted: m })
+            }
+	    break
+            case 'coffe': case 'kopi': {
+            let buttons = [
+                    {buttonId: `coffe`, buttonText: {displayText: 'Next Image'}, type: 1}
+                ]
+                let buttonMessage = {
+                    image: { url: 'https://coffee.alexflipnote.dev/random' },
+                    caption: `? Random Coffe`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 4
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+            case 'wallpaper': {
+                if (!text) throw 'Masukkan Query Title'
+		let { wallpaper } = require('./lib/scraper')
+                anu = await wallpaper(text)
+                result = anu[Math.floor(Math.random() * anu.length)]
+		let buttons = [
+                    {buttonId: `wallpaper ${text}`, buttonText: {displayText: 'Next Image'}, type: 1}
+                ]
+                let buttonMessage = {
+                    image: { url: result.image[0] },
+                    caption: `? Title : ${result.title}\n? Category : ${result.type}\n? Detail : ${result.source}\n? Media Url : ${result.image[2] || result.image[1] || result.image[0]}`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 4
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+            case 'gcsearch': {
+              if (!text) throw 'Masukkan Query Title'
+                anu = await fetchJson(`https://api.akuari.my.id/search/carigc?query=${text}`)
+                n = anu.result
+                result = n[Math.floor(Math.random() * n.length)]
+                let jwbn = `*Nama : ${result.nama}\n*Link : ${result.link}*`
+		let buttons = [{ buttonId: `gcsearch ${text}`, buttonText: { displayText: 'Next' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, jwbn, nyoutube, m, {quoted: fgclink})
+            }
+            break
+            case 'wikimedia': {
+                if (!text) throw 'Masukkan Query Title'
+		let { wikimedia } = require('./lib/scraper')
+                anu = await wikimedia(text)
+                result = anu[Math.floor(Math.random() * anu.length)]
+                let buttons = [
+                    {buttonId: `wikimedia ${text}`, buttonText: {displayText: 'Next Image'}, type: 1}
+                ]
+                let buttonMessage = {
+                    image: { url: result.image },
+                    caption: `? Title : ${result.title}\n? Source : ${result.source}\n? Media Url : ${result.image}`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 4
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+            case 'tinyurl': case 'isgd': case 'vurl': case 'clp': {
+            	if (!text) throw 'Masukkan Query Title'
+                let anu = await fetchJson(`https://api.akuari.my.id/short/${command}?link=${text}`)
+                let buttons = [
+                    {buttonId: `hehehe`, buttonText: {displayText: '??THANKS'}, type: 1}
+                ]
+                let buttonMessage = {
+                    text: anu.hasil,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 2
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: fdoc })
+            }
+            break
+            
+//Pembatas========================================
+            case 'quotesanime': case 'quoteanime': {
+		let { quotesAnime } = require('./lib/scraper')
+                let anu = await quotesAnime()
+                result = anu[Math.floor(Math.random() * anu.length)]
+                let buttons = [
+                    {buttonId: `quotesanime`, buttonText: {displayText: 'Next'}, type: 1}
+                ]
+                let buttonMessage = {
+                    text: `~_${result.quotes}_\n\nBy '${result.karakter}' \n\nAnime : ${result.anime}\n\n- ${result.up_at}`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 2
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+	        case 'motivasi': {
+                let anu = await fetchJson(`https://kocakz.herokuapp.com/api/random/text/quotes`)
+                let buttons = [
+                    {buttonId: `motivasi`, buttonText: {displayText: 'Next'}, type: 1}
+                ]
+                let buttonMessage = {
+                    text: anu.result.quote,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 2
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+            case 'ffcover': case 'crossfire': case 'galaxy': case 'glass': case 'neon': case 'beach': case 'blackpink': case 'igcertificate': case 'ytcertificate': {
+                if (!text) throw 'No Query Text'
+                m.reply(mess.wait)
+                zens.sendMessage(m.chat, { image: { url: api('zenz', '/ephoto/' + command, { text: text }, 'apikey') }, caption: `Ephoto ${command}` }, { quoted: m })
+            }
+            break
+	    case 'nomerhoki': case 'nomorhoki': {
+                if (!Number(text)) throw `Example : ${prefix + command} 6285692287644`
+                let anu = await primbon.nomer_hoki(Number(text))
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nomor HP :* ${anu.message.nomer_hp}\n? *Angka Shuzi :* ${anu.message.angka_shuzi}\n? *Energi Positif :*\n- Kekayaan : ${anu.message.energi_positif.kekayaan}\n- Kesehatan : ${anu.message.energi_positif.kesehatan}\n- Cinta : ${anu.message.energi_positif.cinta}\n- Kestabilan : ${anu.message.energi_positif.kestabilan}\n- Persentase : ${anu.message.energi_positif.persentase}\n? *Energi Negatif :*\n- Perselisihan : ${anu.message.energi_negatif.perselisihan}\n- Kehilangan : ${anu.message.energi_negatif.kehilangan}\n- Malapetaka : ${anu.message.energi_negatif.malapetaka}\n- Kehancuran : ${anu.message.energi_negatif.kehancuran}\n- Persentase : ${anu.message.energi_negatif.persentase}`, m)
+            }
+            break
+            case 'artimimpi': case 'tafsirmimpi': {
+                if (!text) throw `Example : ${prefix + command} belanja`
+                let anu = await primbon.tafsir_mimpi(text)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Mimpi :* ${anu.message.mimpi}\n? *Arti :* ${anu.message.arti}\n? *Solusi :* ${anu.message.solusi}`, m)
+            }
+            break
+            case 'ramalanjodoh': case 'ramaljodoh': {
+                if (!text) throw `Example : ${prefix + command} Dika, 7, 7, 2005, Novia, 16, 11, 2004`
+                let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
+                let anu = await primbon.ramalan_jodoh(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama Anda :* ${anu.message.nama_anda.nama}\n? *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n? *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n? *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'ramalanjodohbali': case 'ramaljodohbali': {
+                if (!text) throw `Example : ${prefix + command} Dika, 7, 7, 2005, Novia, 16, 11, 2004`
+                let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
+                let anu = await primbon.ramalan_jodoh_bali(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama Anda :* ${anu.message.nama_anda.nama}\n? *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n? *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n? *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'suamiistri': {
+                if (!text) throw `Example : ${prefix + command} Dika, 7, 7, 2005, Novia, 16, 11, 2004`
+                let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
+                let anu = await primbon.suami_istri(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama Suami :* ${anu.message.suami.nama}\n? *Lahir Suami :* ${anu.message.suami.tgl_lahir}\n? *Nama Istri :* ${anu.message.istri.nama}\n? *Lahir Istri :* ${anu.message.istri.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'ramalancinta': case 'ramalcinta': {
+                if (!text) throw `Example : ${prefix + command} Dika, 7, 7, 2005, Novia, 16, 11, 2004`
+                let [nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2] = text.split`,`
+                let anu = await primbon.ramalan_cinta(nama1, tgl1, bln1, thn1, nama2, tgl2, bln2, thn2)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama Anda :* ${anu.message.nama_anda.nama}\n? *Lahir Anda :* ${anu.message.nama_anda.tgl_lahir}\n? *Nama Pasangan :* ${anu.message.nama_pasangan.nama}\n? *Lahir Pasangan :* ${anu.message.nama_pasangan.tgl_lahir}\n? *Sisi Positif :* ${anu.message.sisi_positif}\n? *Sisi Negatif :* ${anu.message.sisi_negatif}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'artinama': {
+                if (!text) throw `Example : ${prefix + command} Dika Ardianta`
+                let anu = await primbon.arti_nama(text)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Arti :* ${anu.message.arti}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'kecocokannama': case 'cocoknama': {
+                if (!text) throw `Example : ${prefix + command} Dika, 7, 7, 2005`
+                let [nama, tgl, bln, thn] = text.split`,`
+                let anu = await primbon.kecocokan_nama(nama, tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Life Path :* ${anu.message.life_path}\n? *Destiny :* ${anu.message.destiny}\n? *Destiny Desire :* ${anu.message.destiny_desire}\n? *Personality :* ${anu.message.personality}\n? *Persentase :* ${anu.message.persentase_kecocokan}`, m)
+            }
+            break
+            case 'kecocokanpasangan': case 'cocokpasangan': case 'pasangan': {
+                if (!text) throw `Example : ${prefix + command} Dika|Novia`
+                let [nama1, nama2] = text.split`|`
+                let anu = await primbon.kecocokan_nama_pasangan(nama1, nama2)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendImage(m.chat,  anu.message.gambar, `? *Nama Anda :* ${anu.message.nama_anda}\n? *Nama Pasangan :* ${anu.message.nama_pasangan}\n? *Sisi Positif :* ${anu.message.sisi_positif}\n? *Sisi Negatif :* ${anu.message.sisi_negatif}`, m)
+            }
+            break
+            case 'jadianpernikahan': case 'jadiannikah': {
+                if (!text) throw `Example : ${prefix + command} 6, 12, 2020`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.tanggal_jadian_pernikahan(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Tanggal Pernikahan :* ${anu.message.tanggal}\n? *karakteristik :* ${anu.message.karakteristik}`, m)
+            }
+            break
+            case 'sifatusaha': {
+                if (!ext)throw `Example : ${prefix+ command} 28, 12, 2021`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.sifat_usaha_bisnis(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.hari_lahir}\n? *Usaha :* ${anu.message.usaha}`, m)
+            }
+            break
+            case 'rejeki': case 'rezeki': {
+                if (!text) throw `Example : ${prefix + command} 7, 7, 2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.rejeki_hoki_weton(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.hari_lahir}\n? *Rezeki :* ${anu.message.rejeki}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'pekerjaan': case 'kerja': {
+                if (!text) throw `Example : ${prefix + command} 7, 7, 2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.pekerjaan_weton_lahir(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.hari_lahir}\n? *Pekerjaan :* ${anu.message.pekerjaan}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'ramalannasib': case 'ramalnasib': case 'nasib': {
+                if (!text) throw `Example?:\n${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.ramalan_nasib(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Analisa :* ${anu.message.analisa}\n? *Angka Akar :* ${anu.message.angka_akar}\n? *Sifat :* ${anu.message.sifat}\n? *Elemen :* ${anu.message.elemen}\n? *Angka Keberuntungan :* ${anu.message.angka_keberuntungan}`, m)
+            }
+            break
+            case 'potensipenyakit': case 'penyakit': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.cek_potensi_penyakit(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Analisa :* ${anu.message.analisa}\n? *Sektor :* ${anu.message.sektor}\n? *Elemen :* ${anu.message.elemen}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'artitarot': case 'tarot': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.arti_kartu_tarot(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendImage(m.chat, anu.message.image, `? *Lahir :* ${anu.message.tgl_lahir}\n? *Simbol Tarot :* ${anu.message.simbol_tarot}\n? *Arti :* ${anu.message.arti}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'fengshui': {
+                if (!text) throw `Example : ${prefix + command} Dika,1,2005\n\nNote : ${prefix + command} Nama, gender, tahun lahir\nGender : 1 untuk laki-laki & 2 untuk perempuan`
+                let [nama, gender, tahun] = text.split`,`
+                let anu = await primbon.perhitungan_feng_shui(nama, gender, tahun)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tahun_lahir}\n? *Gender :* ${anu.message.jenis_kelamin}\n? *Angka Kua :* ${anu.message.angka_kua}\n? *Kelompok :* ${anu.message.kelompok}\n? *Karakter :* ${anu.message.karakter}\n? *Sektor Baik :* ${anu.message.sektor_baik}\n? *Sektor Buruk :* ${anu.message.sektor_buruk}`, m)
+            }
+            break
+            case 'haribaik': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.petung_hari_baik(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.tgl_lahir}\n? *Kala Tinantang :* ${anu.message.kala_tinantang}\n? *Info :* ${anu.message.info}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'harisangar': case 'taliwangke': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.hari_sangar_taliwangke(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Lahir :* ${anu.message.tgl_lahir}\n? *Hasil :* ${anu.message.result}\n? *Info :* ${anu.message.info}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'harinaas': case 'harisial': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.primbon_hari_naas(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Hari Lahir :* ${anu.message.hari_lahir}\n? *Tanggal Lahir :* ${anu.message.tgl_lahir}\n? *Hari Naas :* ${anu.message.hari_naas}\n? *Info :* ${anu.message.catatan}\n? *Catatan :* ${anu.message.info}`, m)
+            }
+            break
+            case 'nagahari': case 'harinaga': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.rahasia_naga_hari(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Hari Lahir :* ${anu.message.hari_lahir}\n? *Tanggal Lahir :* ${anu.message.tgl_lahir}\n? *Arah Naga Hari :* ${anu.message.arah_naga_hari}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'arahrejeki': case 'arahrezeki': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.primbon_arah_rejeki(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Hari Lahir :* ${anu.message.hari_lahir}\n? *tanggal Lahir :* ${anu.message.tgl_lahir}\n? *Arah Rezeki :* ${anu.message.arah_rejeki}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'peruntungan': {
+                if (!text) throw `Example : ${prefix + command} DIka,7,7,2005,2022\n\nNote : ${prefix + command} Nama, tanggal lahir, bulan lahir, tahun lahir, untuk tahun`
+                let [nama, tgl, bln, thn, untuk] = text.split`,`
+                let anu = await primbon.ramalan_peruntungan(nama, tgl, bln, thn, untuk)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Peruntungan Tahun :* ${anu.message.peruntungan_tahun}\n? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'weton': case 'wetonjawa': {
+                if (!text) throw `Example : ${prefix + command} 7,7,2005`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.weton_jawa(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Tanggal :* ${anu.message.tanggal}\n? *Jumlah Neptu :* ${anu.message.jumlah_neptu}\n? *Watak Hari :* ${anu.message.watak_hari}\n? *Naga Hari :* ${anu.message.naga_hari}\n? *Jam Baik :* ${anu.message.jam_baik}\n? *Watak Kelahiran :* ${anu.message.watak_kelahiran}`, m)
+            }
+            break
+            case 'sifat': case 'karakter': {
+                if (!text) throw `Example : ${prefix + command} Dika, 7,7,2005`
+                let [nama, tgl, bln, thn] = text.split`,`
+                let anu = await primbon.sifat_karakter_tanggal_lahir(nama, tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Garis Hidup :* ${anu.message.garis_hidup}`, m)
+            }
+            break
+            case 'keberuntungan': {
+                if (!text) throw `Example : ${prefix + command} Dika, 7,7,2005`
+                let [nama, tgl, bln, thn] = text.split`,`
+                let anu = await primbon.potensi_keberuntungan(nama, tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Nama :* ${anu.message.nama}\n? *Lahir :* ${anu.message.tgl_lahir}\n? *Hasil :* ${anu.message.result}`, m)
+            }
+            break
+            case 'memancing': {
+                if (!text) throw `Example : ${prefix + command} 12,1,2022`
+                let [tgl, bln, thn] = text.split`,`
+                let anu = await primbon.primbon_memancing_ikan(tgl, bln, thn)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'masasubur': {
+                if (!text) throw `Example : ${prefix + command} 12,1,2022,28\n\nNote : ${prefix + command} hari pertama menstruasi, siklus`
+                let [tgl, bln, thn, siklus] = text.split`,`
+                let anu = await primbon.masa_subur(tgl, bln, thn, siklus)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Hasil :* ${anu.message.result}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            case 'zodiak': case 'zodiac': {
+                if (!text) throw `Example : ${prefix+ command} 7 7 2005`
+                let zodiak = [
+                    ["capricorn", new Date(1970, 0, 1)],
+                    ["aquarius", new Date(1970, 0, 20)],
+                    ["pisces", new Date(1970, 1, 19)],
+                    ["aries", new Date(1970, 2, 21)],
+                    ["taurus", new Date(1970, 3, 21)],
+                    ["gemini", new Date(1970, 4, 21)],
+                    ["cancer", new Date(1970, 5, 22)],
+                    ["leo", new Date(1970, 6, 23)],
+                    ["virgo", new Date(1970, 7, 23)],
+                    ["libra", new Date(1970, 8, 23)],
+                    ["scorpio", new Date(1970, 9, 23)],
+                    ["sagittarius", new Date(1970, 10, 22)],
+                    ["capricorn", new Date(1970, 11, 22)]
+                ].reverse()
+
+                function getZodiac(month, day) {
+                    let d = new Date(1970, month - 1, day)
+                    return zodiak.find(([_,_d]) => d >= _d)[0]
+                }
+                let date = new Date(text)
+                if (date == 'Invalid Date') throw date
+                let d = new Date()
+                let [tahun, bulan, tanggal] = [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+                let birth = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+
+                let zodiac = await getZodiac(birth[1], birth[2])
+                
+                let anu = await primbon.zodiak(zodiac)
+                if (anu.status == false) return m.reply(anu.message)
+                zens.sendText(m.chat, `? *Zodiak :* ${anu.message.zodiak}\n? *Nomor :* ${anu.message.nomor_keberuntungan}\n? *Aroma :* ${anu.message.aroma_keberuntungan}\n? *Planet :* ${anu.message.planet_yang_mengitari}\n? *Bunga :* ${anu.message.bunga_keberuntungan}\n? *Warna :* ${anu.message.warna_keberuntungan}\n? *Batu :* ${anu.message.batu_keberuntungan}\n? *Elemen :* ${anu.message.elemen_keberuntungan}\n? *Pasangan Zodiak :* ${anu.message.pasangan_zodiak}\n? *Catatan :* ${anu.message.catatan}`, m)
+            }
+            break
+            
+//PEMBATAS=======================================
+	    case 'stalker': case 'stalk': {
+		if (!isPremium && global.db.data.users[m.sender].limit < 1) return m.reply('Limit Harian Anda Telah Habis')
+                if (!text) return m.reply(`Example : ${prefix +command} type id\n\nList Type :\n1. ff (Free Fire)\n2. ml (Mobile Legends)\n3. aov (Arena Of Valor)\n4. cod (Call Of Duty)\n5. pb (point Blank)\n6. ig (Instagram)\n7. npm (https://npmjs.com)`)
+                let [type, id, zone] = args
+                if (type.toLowerCase() == 'ff') {
+                    if (!id) throw `No Query id, Example ${prefix + command} ff 552992060`
+                    let anu = await fetchJson(api('zenz', '/api/nickff', { apikey: global.APIKeys[global.APIs['zenz']], query: id }))
+                    if (anu.status == false) return m.reply(anu.result.message)
+                    m.reply(`ID : ${anu.result.gameId}\nUsername : ${anu.result.userName}`)
+		    db.data.users[m.sender].limit -= 1
+                } else if (type.toLowerCase() == 'ml') {
+                    if (!id) throw `No Query id, Example : ${prefix + command} ml 214885010 2253`
+                    if (!zone) throw `No Query id, Example : ${prefix + command} ml 214885010 2253`
+                    let anu = await fetchJson(api('zenz', '/api/nickml', { apikey: global.APIKeys[global.APIs['zenz']], query: id, query2: zone }))
+                    if (anu.status == false) return m.reply(anu.result.message)
+                    m.reply(`ID : ${anu.result.gameId}\nZone : ${anu.result.zoneId}\nUsername : ${anu.result.userName}`)
+		    db.data.users[m.sender].limit -= 1
+                } else if (type.toLowerCase() == 'aov') {
+                    if (!id) throw `No Query id, Example ${prefix + command} aov 293306941441181`
+                    let anu = await fetchJson(api('zenz', '/api/nickaov', { apikey: global.APIKeys[global.APIs['zenz']], query: id }))
+                    if (anu.status == false) return m.reply(anu.result.message)
+                    m.reply(`ID : ${anu.result.gameId}\nUsername : ${anu.result.userName}`)
+		    db.data.users[m.sender].limit -= 1
+                } else if (type.toLowerCase() == 'cod') {
+                    if (!id) throw `No Query id, Example ${prefix + command} cod 6290150021186841472`
+                    let anu = await fetchJson(api('zenz', '/api/nickcod', { apikey: global.APIKeys[global.APIs['zenz']], query: id }))
+                    if (anu.status == false) return m.reply(anu.result.message)
+                    m.reply(`ID : ${anu.result.gameId}\nUsername : ${anu.result.userName}`)
+		    db.data.users[m.sender].limit -= 1
+                } else if (type.toLowerCase() == 'pb') {
+                    if (!id) throw `No Query id, Example ${prefix + command} pb riio46`
+                    let anu = await fetchJson(api('zenz', '/api/nickpb', { apikey: global.APIKeys[global.APIs['zenz']], query: id }))
+                    if (anu.status == false) return m.reply(anu.result.message)
+                    m.reply(`ID : ${anu.result.gameId}\nUsername : ${anu.result.userName}`)
+		    db.data.users[m.sender].limit -= 1
+                } else if (type.toLowerCase() == 'ig') {
+                    if (!id) throw `No Query username, Example : ${prefix + command} ig cak_haho`
+                    let { result: anu } = await fetchJson(api('zenz', '/api/stalker/ig', { username: id }, 'apikey'))
+                    if (anu.status == false) return m.reply(anu.result.message)
+                    zens.sendMedia(m.chat, anu.caption.profile_hd, '', `? Full Name : ${anu.caption.full_name}\n? User Name : ${anu.caption.user_name}\n? ID ${anu.caption.user_id}\n? Followers : ${anu.caption.followers}\n? Following : ${anu.caption.following}\n? Bussines : ${anu.caption.bussines}\n? Profesional : ${anu.caption.profesional}\n? Verified : ${anu.caption.verified}\n? Private : ${anu.caption.private}\n? Bio : ${anu.caption.biography}\n? Bio Url : ${anu.caption.bio_url}`, m)
+		    db.data.users[m.sender].limit -= 1
+                } else if (type.toLowerCase() == 'npm') {
+                    if (!id) throw `No Query username, Example : ${prefix + command} npm scrape-primbon`
+                    let { result: anu } = await fetchJson(api('zenz', '/api/stalker/npm', { query: id }, 'apikey'))
+                    if (anu.status == false) return m.reply(anu.result.message)
+                    m.reply(`? Name : ${anu.name}\n? Version : ${Object.keys(anu.versions)}\n? Created : ${tanggal(anu.time.created)}\n? Modified : ${tanggal(anu.time.modified)}\n? Maintainers :\n ${anu.maintainers.map(v => `- ${v.name} : ${v.email}`).join('\n')}\n\n? Description : ${anu.description}\n? Homepage : ${anu.homepage}\n? Keywords : ${anu.keywords}\n? Author : ${anu.author.name}\n? License : ${anu.license}\n? Readme : ${anu.readme}`)
+		    db.data.users[m.sender].limit -= 1
+                } else {
+                    m.reply(`Example : ${prefix +command} type id\n\nList Type :\n1. ff (Free Fire)\n2. ml (Mobile Legends)\n3. aov (Arena Of Valor)\n4. cod (Call Of Duty)\n5. pb (point Blank)\n6. ig (Instagram)\n7. npm (https://npmjs.com)`)
+                }
+            }
+            break
+            case 'tiktok': case 'tiktoknowm': {
+                if (!text) throw 'Masukkan Query Link!'
+                m.reply(mess.wait)
+                let anu = await fetchJson(`https://anabotofc.herokuapp.com/api/download/tiktok2?url=${text}&apikey=AnaBot`)
+                let buttons = [
+                    {buttonId: `allmenu`, buttonText: {displayText: '? List Menu'}, type: 1},
+                    {buttonId: `tiktokmp3 ${text}`, buttonText: {displayText: '? Audio'}, type: 1}
+                ]
+                let buttonMessage = {
+                    video: { url: anu.result.nowm },
+                    caption: `Download From ${text}`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 5
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+           /**case 'tiktokwm': case 'tiktokwatermark': {
+                if (!text) throw 'Masukkan Query Link!'
+                m.reply(mess.wait)
+                let anu = await fetchJson(`https://botcahx-rest-api.herokuapp.com/api/dowloader/tikok?url=${text}`)
+                let buttons = [
+                    {buttonId: `tiktoknowm ${text}`, buttonText: {displayText: '? No Watermark'}, type: 1},
+                    {buttonId: `tiktokmp3 ${text}`, buttonText: {displayText: '? Audio'}, type: 1}
+                ]
+                let buttonMessage = {
+                    video: { url: anu.result.video_original },
+                    caption: `Download From ${text}`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 5
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break**/
+            case 'tiktokmp3': case 'tiktokaudio': {
+                if (!text) throw 'Masukkan Query Link!'
+                m.reply(mess.wait)
+                let anu = await fetchJson(`https://anabotofc.herokuapp.com/api/download/tiktok2?url=${text}&apikey=AnaBot`)
+                let buttons = [
+                    {buttonId: `allmenu`, buttonText: {displayText: '? List Menu'}, type: 1},
+                    {buttonId: `tiktoknowm ${text}`, buttonText: {displayText: '? No Watermark'}, type: 1}
+                ]
+                let buttonMessage = {
+                    text: `Download From ${text}`,
+                    footer: nyoutube,
+                    buttons: buttons,
+                    headerType: 2
+                }
+                let msg = await zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+                zens.sendMessage(m.chat, { audio: { url: anu.result.nowm }, mimetype: 'audio/mpeg'}, { quoted: msg })
+            }
+            break
+	        case 'instagram': case 'ig': case 'igdl': {
+                if (!text) throw 'No Query Url!'
+                m.reply(mess.wait)
+                if (/(?:\/p\/|\/reel\/|\/tv\/)([^\s&]+)/.test(isUrl(text)[0])) {
+                    let anu = await fetchJson(api('zenz', '/downloader/instagram2', { url: isUrl(text)[0] }, 'apikey'))
+                    for (let media of anu.data) zens.sendFileUrl(m.chat, media, `Download Url Instagram From ${isUrl(text)[0]}`, m)
+                } else if (/\/stories\/([^\s&]+)/.test(isUrl(text)[0])) {
+                    let anu = await fetchJson(api('zenz', '/downloader/instastory', { url: isUrl(text)[0] }, 'apikey'))
+                    zens.sendFileUrl(m.chat, anu.media[0].url, `Download Url Instagram From ${isUrl(text)[0]}`, m)
+                }
+            }
+            break
+            case 'joox': case 'jooxdl': {
+                if (!text) throw 'No Query Title'
+                m.reply(mess.wait)
+                let anu = await fetchJson(api('zenz', '/downloader/joox', { query: text }, 'apikey'))
+                let msg = await zens.sendImage(m.chat, anu.result.img, `? Title : ${anu.result.lagu}\n? Album : ${anu.result.album}\n? Singer : ${anu.result.penyanyi}\n? Publish : ${anu.result.publish}\n? Lirik :\n${anu.result.lirik.result}`, m)
+                zens.sendMessage(m.chat, { audio: { url: anu.result.mp4aLink }, mimetype: 'audio/mpeg', fileName: anu.result.lagu+'.m4a' }, { quoted: msg })
+            }
+            break
+            case 'soundcloud': case 'scdl': {
+                if (!text) throw 'No Query Title'
+                m.reply(mess.wait)
+                let anu = await fetchJson(api('zenz', '/downloader/soundcloud', { url: isUrl(text)[0] }, 'apikey'))
+                let msg = await zens.sendImage(m.chat, anu.result.thumb, `? Title : ${anu.result.title}\n? Url : ${isUrl(text)[0]}`)
+                zens.sendMessage(m.chat, { audio: { url: anu.result.url }, mimetype: 'audio/mpeg', fileName: anu.result.title+'.m4a' }, { quoted: msg })
+            }
+            break
+	        case 'twitdl': case 'twitter': {
+                if (!text) throw 'Masukkan Query Link!'
+                m.reply(mess.wait)
+                let anu = await fetchJson(api('zenz', '/api/downloader/twitter', { url: text }, 'apikey'))
+                let buttons = [
+                    {buttonId: `twittermp3 ${text}`, buttonText: {displayText: '? Audio'}, type: 1}
+                ]
+                let buttonMessage = {
+                    video: { url: anu.result.HD || anu.result.SD },
+                    caption: util.format(anu.result),
+                    footer: 'Press The Button Below',
+                    buttons: buttons,
+                    headerType: 5
+                }
+                zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+            }
+            break
+            case 'twittermp3': case 'twitteraudio': {
+                if (!text) throw 'Masukkan Query Link!'
+                m.reply(mess.wait)
+                let anu = await fetchJson(api('zenz', '/api/downloader/twitter', { url: text }, 'apikey'))
+                let buttons = [
+                    {buttonId: `twitter ${text}`, buttonText: {displayText: '? Video'}, type: 1}
+                ]
+                let buttonMessage = {
+		    image: { url: anu.result.thumb },
+                    caption: util.format(anu.result),
+                    footer: 'Press The Button Below',
+                    buttons: buttons,
+                    headerType: 4
+                }
+                let msg = await zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+                zens.sendMessage(m.chat, { audio: { url: anu.result.audio } }, { quoted: msg })
+            }
+            break
+	        case 'fbdl': case 'fb': case 'facebook': {
+                if (!text) throw 'Masukkan Query Link!'
+                m.reply(mess.wait)
+                let anu = await fetchJson(api('zenz', '/api/downloader/facebook', { url: text }, 'apikey'))
+                zens.sendMessage(m.chat, { video: { url: anu.result.url }, caption: `? Title : ${anu.result.title}`}, { quoted: m })
+            }
+            break
+	        case 'pindl': case 'pinterestdl': {
+                if (!text) throw 'Masukkan Query Link!'
+                m.reply(mess.wait)
+                let anu = await fetchJson(api('zenz', '/api/downloader/pinterestdl', { url: text }, 'apikey'))
+                zens.sendMessage(m.chat, { video: { url: anu.result }, caption: `Download From ${text}` }, { quoted: m })
+            }
+            break
+            case 'umma': case 'ummadl': {
+	        if (!text) throw `Example : ${prefix + command} https://umma.id/channel/video/post/gus-arafat-sumber-kecewa-84464612933698`
+                let { umma } = require('./lib) scraper')
+		let anu = await umma(isUrl(text)[0])
+		if (anu.type == 'video') {
+		    let buttons = [
+                        {buttonId: `ytmp3 ${anu.media[0]} 128kbps`, buttonText: {displayText: '? Audio'}, type: 1},
+                        {buttonId: `ytmp4 ${anu.media[0]} 360p`, buttonText: {displayText: '? Video'}, type: 1}
+                    ]
+		    let buttonMessage = {
+		        image: { url: anu.author.profilePic },
+			caption: `
+? Title : ${anu.title}
+? Author : ${anu.author.name}
+? Like : ${anu.like}
+? Caption : ${anu.caption}
+? Url : ${anu.media[0]}
+Untuk Download Media Silahkan Klik salah satu Button dibawah ini atau masukkan command ytmp3/ytmp4 dengan url diatas
+`,
+			footer: zens.user.name,
+			buttons,
+			headerType: 4
+		    }
+		    zens.sendMessage(m.chat, buttonMessage, { quoted: m })
+		} else if (anu.type == 'image') {
+		    anu.media.map(async (url) => {
+		        zens.sendMessage(m.chat, { image: { url }, caption: `? Title : ${anu.title}\n? Author : ${anu.author.name}\n? Like : ${anu.like}\n? Caption : ${anu.caption}` }, { quoted: m })
+		    })
+		}
+	    }
+	    break
+        case 'ringtone': {
+		if (!text) throw `Example : ${prefix + command} black rover`
+        let { ringtone } = require('./lib/scraper')
+		let anu = await ringtone(text)
+		let result = anu[Math.floor(Math.random() * anu.length)]
+		zens.sendMessage(m.chat, { audio: { url: result.audio }, fileName: result.title+'.mp3', mimetype: 'audio/mpeg' }, { quoted: m })
+	    }
+	    break
+		case 'iqra': {
+		oh = `Example : ${prefix + command} 3\n\nIQRA Yang tersedia : 1,2,3,4,5,6`
+		if (!text) throw oh
+		yy = await getBuffer(`https://islamic-api-indonesia.herokuapp.com/api/data/pdf/iqra${text}`)
+		zens.sendMessage(m.chat, {document: yy, mimetype: 'application/pdf', fileName: `iqra${text}.pdf`}, {quoted:m}).catch ((err) => m.reply(oh))
+		}
+		break
+		/**case 'juzamma': {
+		if (args[0] === 'pdf') {
+		m.reply(mess.wait)
+		zens.sendMessage(m.chat, {document: {url: 'https://fatiharridho.my.id/database/islam/juz-amma-arab-latin-indonesia.pdf'}, mimetype: 'application/pdf', fileName: 'juz-amma-arab-latin-indonesia.pdf'}, {quoted:m})
+		} else if (args[0] === 'docx') {
+		m.reply(mess.wait)
+		zens.sendMessage(m.chat, {document: {url: 'https://fatiharridho.my.id/database/islam/juz-amma-arab-latin-indonesia.docx'}, mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: 'juz-amma-arab-latin-indonesia.docx'}, {quoted:m})
+		} else if (args[0] === 'pptx') {
+		m.reply(mess.wait)
+		zens.sendMessage(m.chat, {document: {url: 'https://fatiharridho.my.id/database/islam/juz-amma-arab-latin-indonesia.pptx'}, mimetype: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', fileName: 'juz-amma-arab-latin-indonesia.pptx'}, {quoted:m})
+		} else if (args[0] === 'xlsx') {
+		m.reply(mess.wait)
+		zens.sendMessage(m.chat, {document: {url: 'https://fatiharridho.my.id/database/islam/juz-amma-arab-latin-indonesia.xlsx'}, mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', fileName: 'juz-amma-arab-latin-indonesia.xlsx'}, {quoted:m})
+		} else {
+		m.reply(`Mau format apa ? Example : ${prefix + command} pdf
+
+Format yang tersedia : pdf, docx, pptx, xlsx`)
+		}
+		}
+		break**/
+		case 'hadis': case 'hadist': {
+		if (!args[0]) throw `Contoh:
+${prefix + command} bukhari 1
+${prefix + command} abu-daud 1
+
+Pilihan tersedia:
+abu-daud
+1 - 4590
+ahmad
+1 - 26363
+bukhari
+1 - 7008
+darimi
+1 - 3367
+ibnu-majah
+1 - 4331
+nasai
+1 - 5662
+malik
+1 - 1594
+muslim
+1 - 5362`
+		if (!args[1]) throw `Hadis yang ke berapa?\n\ncontoh:\n${prefix + command} muslim 1`
+		try {
+		let res = await fetchJson(`https://islamic-api-indonesia.herokuapp.com/api/data/json/hadith/${args[0]}`)
+		let { number, arab, id } = res.find(v => v.number == args[1])
+		m.reply(`No. ${number}
+
+${arab}
+
+${id}`)
+		} catch (e) {
+		m.reply(`Hadis tidak ditemukan !`)
+		}
+		}
+		break
+		case 'alquran': {
+		if (!args[0]) throw `Contoh penggunaan:\n${prefix + command} 1 2\n\nmaka hasilnya adalah surah Al-Fatihah ayat 2 beserta audionya, dan ayatnya 1 aja`
+		if (!args[1]) throw `Contoh penggunaan:\n${prefix + command} 1 2\n\nmaka hasilnya adalah surah Al-Fatihah ayat 2 beserta audionya, dan ayatnya 1 aja`
+		let res = await fetchJson(`https://islamic-api-indonesia.herokuapp.com/api/data/quran?surah=${args[0]}&ayat=${args[1]}`)
+		let txt = `*Arab* : ${res.result.data.text.arab}
+*English* : ${res.result.data.translation.en}
+*Indonesia* : ${res.result.data.translation.id}
+
+( Q.S ${res.result.data.surah.name.transliteration.id} : ${res.result.data.number.inSurah} )`
+		m.reply(txt)
+		zens.sendMessage(m.chat, {audio: { url: res.result.data.audio.primary }, mimetype: 'audio/mpeg'}, { quoted : m })
+		}
+		break
+		case 'tafsirsurah': {
+		if (!args[0]) throw `Contoh penggunaan:\n${prefix + command} 1 2\n\nmaka hasilnya adalah tafsir surah Al-Fatihah ayat 2`
+		if (!args[1]) throw `Contoh penggunaan:\n${prefix + command} 1 2\n\nmaka hasilnya adalah tafsir surah Al-Fatihah ayat 2`
+		let res = await fetchJson(`https://islamic-api-indonesia.herokuapp.com/api/data/quran?surah=${args[0]}&ayat=${args[1]}`)
+		let txt = `? *Tafsir Surah*  ?
+
+*Pendek* : ${res.result.data.tafsir.id.short}
+
+*Panjang* : ${res.result.data.tafsir.id.long}
+
+( Q.S ${res.result.data.surah.name.transliteration.id} : ${res.result.data.number.inSurah} )`
+		m.reply(txt)
+		}
+		break
+		
+		case 'playstore': {
+            if (!text) throw `Example : ${prefix + command} clash of clans`
+            let res = await fetchJson(api('zenz', '/webzone/playstore', { query: text }, 'apikey'))
+            let teks = `? Playstore Search From : ${text}\n\n`
+            for (let i of res.result) {
+            teks += `? Name : ${i.name}\n`
+            teks += `? Link : ${i.link}\n`
+            teks += `? Developer : ${i.developer}\n`
+            teks += `? Link Developer : ${i.link_dev}\n\n----------------------\n`
+            }
+            m.reply(teks)
+            }
+            break
+            case 'gsmarena': {
+            if (!text) throw `Example : ${prefix + command} samsung`
+            let res = await fetchJson(api('zenz', '/webzone/gsmarena', { query: text }, 'apikey'))
+            let { judul, rilis, thumb, ukuran, type, storage, display, inchi, pixel, videoPixel, ram, chipset, batrai, merek_batre, detail } = res.result
+let capt = `? Title: ${judul}
+? Realease: ${rilis}
+? Size: ${ukuran}
+? Type: ${type}
+? Storage: ${storage}
+? Display: ${display}
+? Inchi: ${inchi}
+? Pixel: ${pixel}
+? Video Pixel: ${videoPixel}
+? Ram: ${ram}
+? Chipset: ${chipset}
+? Battery: ${batrai}
+? Battery Brand: ${merek_batre}
+? Detail: ${detail}`
+            zens.sendImage(m.chat, thumb, capt, m)
+            }
+            break
+            case 'jadwalbioskop': {
+            if (!text) throw `Example: ${prefix + command} jakarta`
+            let res = await fetchJson(api('zenz', '/webzone/jadwalbioskop', { kota: text }, 'apikey'))
+            let capt = `Jadwal Bioskop From : ${text}\n\n`
+            for (let i of res.result){
+            capt += `? Title: ${i.title}\n`
+            capt += `? Thumbnail: ${i.thumb}\n`
+            capt += `? Url: ${i.url}\n\n----------------------\n`
+            }
+            zens.sendImage(m.chat, res.result[0].thumb, capt, m)
+            }
+            break
+            case 'nowplayingbioskop': {
+            let res = await fetchJson(api('zenz', '/webzone/nowplayingbioskop', {}, 'apikey'))
+            let capt = `Now Playing Bioskop\n\n`
+            for (let i of res.result){
+            capt += `? Title: ${i.title}\n`
+            capt += `? Url: ${i.url}\n`
+            capt += `? Img Url: ${i.img}\n\n----------------------\n`
+            }
+            zens.sendImage(m.chat, res.result[0].img, capt, m)
+            }
+            break
+            case 'aminio': {
+            if (!text) throw `Example: ${prefix + command} free fire`
+            let res = await fetchJson(api('zenz', '/webzone/amino', { query: text }, 'apikey'))
+            let capt = `Amino Search From : ${text}\n\n`
+            for (let i of res.result){
+            capt += `? Community: ${i.community}\n`
+            capt += `? Community Link: ${i.community_link}\n`
+            capt += `? Thumbnail: ${i.community_thumb}\n`
+            capt += `? Description: ${i.community_desc}\n`
+            capt += `? Member Count: ${i.member_count}\n\n----------------------\n`
+            }
+            zens.sendImage(m.chat, 'https://'+res.result[0].community_thumb, capt, m)
+            }
+            break
+            case 'wattpad': {
+            if (!text) throw `Example : ${prefix + command} love`
+            let res = await fetchJson(api('zenz', '/webzone/wattpad', { query: text }, 'apikey'))
+            let { judul, dibaca, divote, bab, waktu, url, thumb, description } = res.result[0]
+            let capt = `Wattpad From ${text}\n\n`
+            capt += `? Judul: ${judul}\n`
+            capt += `? Dibaca: ${dibaca}\n`
+            capt += `? Divote: ${divote}\n`
+            capt += `? Bab: ${bab}\n`
+            capt += `? Waktu: ${waktu}\n`
+            capt += `? Url: ${url}\n`
+            capt += `? Deskripsi: ${description}`
+            zens.sendImage(m.chat, thumb, capt, m)
+            }
+            break
+            case 'webtoons': {
+            if (!text) throw `Example : ${prefix + command} love`
+            let res = await fetchJson(api('zenz', '/webzone/webtoons', { query: text }, 'apikey'))
+            let capt = `Webtoons Search From : ${text}\n\n`
+            for (let i of res.result) {
+            capt += `? Judul: ${i.judul}\n`
+            capt += `? Like: ${i.like}\n`
+            capt += `? Creator: ${i.creator}\n`
+            capt += `? Genre: ${i.genre}\n`
+            capt += `? Url: ${i.url}\n\n----------------------\n`
+            }
+            m.reply(capt)
+            }
+            break
+            case 'drakor': {
+            if (!text) throw `Example : ${prefix + command} love`
+            let res = await fetchJson(api('zenz', '/webzone/drakor', { query: text }, 'apikey'))
+            let capt = `Drakor Search From : ${text}\n\n`
+            for (let i of res.result) {
+            capt += `? Judul: ${i.judul}\n`
+            capt += `? Years: ${i.years}\n`
+            capt += `? Genre: ${i.genre}\n`
+            capt += `? Url: ${i.url}\n`
+            capt += `? Thumbnail Url: ${i.thumbnail}\n\n----------------------\n`
+            }
+            zens.sendImage(m.chat, res.result[0].thumbnail, capt, m)
+            }
             break
 
-        printer('Closest Servers:\n%r' % self.closest, debug=True)
-        return self.closest
+//PEMBATAS=======================================
+            case 'rules': {
+               goblok = fs.readFileSync('./sound/rules.mp3')
+zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
+{
+rules = `+--? *Rules BOT*
+¦
+¦ *No Spam & Telp?*
+¦
++-------????`
+let buttons = [{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '??Sewa' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, rules, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'sponsor': {
+            if (!m.isGroup) throw mess.group
+            let qontak = `6285718971848@s.whatsapp.net`
+let dana = `6281911500445@s.whatsapp.net`
+let shopeeotp = `6285574670796@s.whatsapp.net`
+let shopee = `622150996855@s.whatsapp.net`
+let tokopedia = `6281197911081@s.whatsapp.net`
+let smartfrend = `628881212888@s.whatsapp.net`
+let getcontact = `447990653714@s.whatsapp.net`
+let facebook = `447710173736@s.whatsapp.net`
+let pasarpolis = `6287700178000@s.whatsapp.net`
+let kominfo = `628119224545@s.whatsapp.net`
+let alfamart = `628111500959@s.whatsapp.net`
+            let ownernya = ownernomer + '@s.whatsapp.net'
+            let me = m.sender
+            let jawab = `*Bot by Zens cuy* 
+-Creator :  @${ownernya.split('@')[0]}\n-Lu : @${me.split('@')[0]}\n-Powered  : @${ini_mark.split('@')[0]}\n- :  @${qontak.split('@')[0]}\n- :  @${dana.split('@')[0]}\n- :  @${shopeeotp.split('@')[0]}\n- :  @${shopee.split('@')[0]}\n- :  @${tokopedia.split('@')[0]}\n- :  @${smartfrend.split('@')[0]}\n- :  @${getcontact.split('@')[0]}\n- :  @${facebook.split('@')[0]}\n- :  @${pasarpolis.split('@')[0]}\n- :  @${getcontact.split('@')[0]}\n- :  @${kominfo.split('@')[0]}\n- :  @${alfamart.split('@')[0]}`
+            let ments = [ownernya, me, ini_mark, qontak, dana, shopeeotp, shopee, tokopedia, smartfrend, getcontact, facebook, pasarpolis, kominfo, alfamart]
+            let buttons = [
+                        { buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 }
+                    ]
+                    await zens.sendButtonText(m.chat, buttons, jawab, zens.user.name, m, {mentions: ments})
+            }
+            break
+            case 'menu': {
+               goblok = fs.readFileSync('./sound/menu.mp3')
+zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
+{
+            let ownernya = ownernomer + '@s.whatsapp.net'
+            let me = m.sender
+            let jawab = `*${ucapanWaktu}*
+?--?? ???????? ???????? ??*
++ *Nama* : ${pushname}
++ *Number* : @${me.split('@')[0]}
++ *Premium* : ${isPremium ? '?' : `?`}
++ *Limit* : ${isPremium ? '?Infinity' : `??${db.data.users[m.sender].limit}`}
+?--?
 
-    def get_best_server(self, servers=None):
-        """Perform a speedtest.net "ping" to determine which speedtest.net
-        server has the lowest latency
-        """
+?--?? ???????? ?????? ??
++ *Nama CS* : ${pushname}
++ *Powered* : @${ini_mark.split('@')[0]}
++ *Owner* : @${ownernya.split('@')[0]}
++ *Mode* : ${zens.public ? 'Public' : `Self`}
++ *Prefix* :? MULTI-PREFIX ?
+?--?
 
-        if not servers:
-            if not self.closest:
-                servers = self.get_closest_servers()
-            servers = self.closest
-
-        if self._source_address:
-            source_address_tuple = (self._source_address, 0)
-        else:
-            source_address_tuple = None
-
-        user_agent = build_user_agent()
-
-        results = {}
-        for server in servers:
-            cum = []
-            url = os.path.dirname(server['url'])
-            stamp = int(timeit.time.time() * 1000)
-            latency_url = '%s/latency.txt?x=%s' % (url, stamp)
-            for i in range(0, 3):
-                this_latency_url = '%s.%s' % (latency_url, i)
-                printer('%s %s' % ('GET', this_latency_url),
-                        debug=True)
-                urlparts = urlparse(latency_url)
-                try:
-                    if urlparts[0] == 'https':
-                        h = SpeedtestHTTPSConnection(
-                            urlparts[1],
-                            source_address=source_address_tuple
-                        )
-                    else:
-                        h = SpeedtestHTTPConnection(
-                            urlparts[1],
-                            source_address=source_address_tuple
-                        )
-                    headers = {'User-Agent': user_agent}
-                    path = '%s?%s' % (urlparts[2], urlparts[4])
-                    start = timeit.default_timer()
-                    h.request("GET", path, headers=headers)
-                    r = h.getresponse()
-                    total = (timeit.default_timer() - start)
-                except HTTP_ERRORS:
-                    e = get_exception()
-                    printer('ERROR: %r' % e, debug=True)
-                    cum.append(3600)
-                    continue
-
-                text = r.read(9)
-                if int(r.status) == 200 and text == 'test=test'.encode():
-                    cum.append(total)
-                else:
-                    cum.append(3600)
-                h.close()
-
-            avg = round((sum(cum) / 6) * 1000.0, 3)
-            results[avg] = server
-
-        try:
-            fastest = sorted(results.keys())[0]
-        except IndexError:
-            raise SpeedtestBestServerFailure('Unable to connect to servers to '
-                                             'test latency.')
-        best = results[fastest]
-        best['latency'] = fastest
-
-        self.results.ping = fastest
-        self.results.server = best
-
-        self._best.update(best)
-        printer('Best Server:\n%r' % best, debug=True)
-        return best
-
-    def download(self, callback=do_nothing, threads=None):
-        """Test download speed against speedtest.net
-
-        A ``threads`` value of ``None`` will fall back to those dictated
-        by the speedtest.net configuration
-        """
-
-        urls = []
-        for size in self.config['sizes']['download']:
-            for _ in range(0, self.config['counts']['download']):
-                urls.append('%s/random%sx%s.jpg' %
-                            (os.path.dirname(self.best['url']), size, size))
-
-        request_count = len(urls)
-        requests = []
-        for i, url in enumerate(urls):
-            requests.append(
-                build_request(url, bump=i, secure=self._secure)
-            )
-
-        max_threads = threads or self.config['threads']['download']
-        in_flight = {'threads': 0}
-
-        def producer(q, requests, request_count):
-            for i, request in enumerate(requests):
-                thread = HTTPDownloader(
-                    i,
-                    request,
-                    start,
-                    self.config['length']['download'],
-                    opener=self._opener,
-                    shutdown_event=self._shutdown_event
-                )
-                while in_flight['threads'] >= max_threads:
-                    timeit.time.sleep(0.001)
-                thread.start()
-                q.put(thread, True)
-                in_flight['threads'] += 1
-                callback(i, request_count, start=True)
-
-        finished = []
-
-        def consumer(q, request_count):
-            _is_alive = thread_is_alive
-            while len(finished) < request_count:
-                thread = q.get(True)
-                while _is_alive(thread):
-                    thread.join(timeout=0.001)
-                in_flight['threads'] -= 1
-                finished.append(sum(thread.result))
-                callback(thread.i, request_count, end=True)
-
-        q = Queue(max_threads)
-        prod_thread = threading.Thread(target=producer,
-                                       args=(q, requests, request_count))
-        cons_thread = threading.Thread(target=consumer,
-                                       args=(q, request_count))
-        start = timeit.default_timer()
-        prod_thread.start()
-        cons_thread.start()
-        _is_alive = thread_is_alive
-        while _is_alive(prod_thread):
-            prod_thread.join(timeout=0.001)
-        while _is_alive(cons_thread):
-            cons_thread.join(timeout=0.001)
-
-        stop = timeit.default_timer()
-        self.results.bytes_received = sum(finished)
-        self.results.download = (
-            (self.results.bytes_received / (stop - start)) * 8.0
-        )
-        if self.results.download > 100000:
-            self.config['threads']['upload'] = 8
-        return self.results.download
-
-    def upload(self, callback=do_nothing, pre_allocate=True, threads=None):
-        """Test upload speed against speedtest.net
-
-        A ``threads`` value of ``None`` will fall back to those dictated
-        by the speedtest.net configuration
-        """
-
-        sizes = []
-
-        for size in self.config['sizes']['upload']:
-            for _ in range(0, self.config['counts']['upload']):
-                sizes.append(size)
-
-        # request_count = len(sizes)
-        request_count = self.config['upload_max']
-
-        requests = []
-        for i, size in enumerate(sizes):
-            # We set ``0`` for ``start`` and handle setting the actual
-            # ``start`` in ``HTTPUploader`` to get better measurements
-            data = HTTPUploaderData(
-                size,
-                0,
-                self.config['length']['upload'],
-                shutdown_event=self._shutdown_event
-            )
-            if pre_allocate:
-                data.pre_allocate()
-
-            headers = {'Content-length': size}
-            requests.append(
-                (
-                    build_request(self.best['url'], data, secure=self._secure,
-                                  headers=headers),
-                    size
-                )
-            )
-
-        max_threads = threads or self.config['threads']['upload']
-        in_flight = {'threads': 0}
-
-        def producer(q, requests, request_count):
-            for i, request in enumerate(requests[:request_count]):
-                thread = HTTPUploader(
-                    i,
-                    request[0],
-                    start,
-                    request[1],
-                    self.config['length']['upload'],
-                    opener=self._opener,
-                    shutdown_event=self._shutdown_event
-                )
-                while in_flight['threads'] >= max_threads:
-                    timeit.time.sleep(0.001)
-                thread.start()
-                q.put(thread, True)
-                in_flight['threads'] += 1
-                callback(i, request_count, start=True)
-
-        finished = []
-
-        def consumer(q, request_count):
-            _is_alive = thread_is_alive
-            while len(finished) < request_count:
-                thread = q.get(True)
-                while _is_alive(thread):
-                    thread.join(timeout=0.001)
-                in_flight['threads'] -= 1
-                finished.append(thread.result)
-                callback(thread.i, request_count, end=True)
-
-        q = Queue(threads or self.config['threads']['upload'])
-        prod_thread = threading.Thread(target=producer,
-                                       args=(q, requests, request_count))
-        cons_thread = threading.Thread(target=consumer,
-                                       args=(q, request_count))
-        start = timeit.default_timer()
-        prod_thread.start()
-        cons_thread.start()
-        _is_alive = thread_is_alive
-        while _is_alive(prod_thread):
-            prod_thread.join(timeout=0.1)
-        while _is_alive(cons_thread):
-            cons_thread.join(timeout=0.1)
-
-        stop = timeit.default_timer()
-        self.results.bytes_sent = sum(finished)
-        self.results.upload = (
-            (self.results.bytes_sent / (stop - start)) * 8.0
-        )
-        return self.results.upload
+?--?? ?????????????????? ???????? ??
++ *Hari Ini* : ${hariini}
++ *Wib* : ${barat} WIB
++ *Wita* : ${tengah} WITA
++ *Wit* : ${timur} WIT
+?--?
 
 
-def ctrl_c(shutdown_event):
-    """Catch Ctrl-C key sequence and set a SHUTDOWN_EVENT for our threaded
-    operations
-    """
-    def inner(signum, frame):
-        shutdown_event.set()
-        printer('\nCancelling...', error=True)
-        sys.exit(0)
-    return inner
+`
+            let ments = [ownernya, me, ini_mark]
+            let buttons = [{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'rules', buttonText: { displayText: '? Rules' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, jawab, nyoutube, m, {mentions: ments, quoted: fkontak})
+            } 
+break
+            case 'daftardiri': case 'list': case 'help': {
+            let ownernya = ownernomer + '@s.whatsapp.net'
+            let me = m.sender
+            let ments = [ownernya, me, ini_mark]
+            let kukiw = `*${ucapanWaktu}*
+?--?? ???????? ???????? ??
++ *Nama* : ${pushname}
++ *Number* : ${me.split('@')[0]}
++ *Premium* : ${isPremium ? '?' : `?`}
++ *Limit* : ${isPremium ? '?Infinity' : `??${db.data.users[m.sender].limit}`}
+?--?
 
+?--?? ???????? ?????? ??
++ *Nama Bot* : ${pushname}
++ *Mode* : ${zens.public ? 'Public' : `Self`}
++ *Prefix* :? MULTI-PREFIX ?
+?--
 
-def version():
-    """Print the version"""
+?--?? ???????????????????? ???????? ??
++ *Hari Ini* : ${hariini}
++ *Wib* : ${barat} WIB
++ *Wita* : ${tengah} WITA
++ *Wit* : ${timur} WIT
+?--?`
+                let sections = [
+                {
+                title: "CHANGE MENU BOT",
+                rows: [
+                {title: "Isi Data Diri", rowId: `mgroup`, description: `Daftarkan Diri`},
+                {title: "List Harga Tiket", rowId: `mwebzone`, description: `Tampilkan Harga Tiket`},
+                {title: "List Jam Berangkat", rowId: `mdownloader`, description: `Tampilkan Keberangkatan Tiket`},
+                {title: "Perlu Bantuan", rowId: `msearch`, description: `Butuh Bantuan CS Bot`},
+                {title: "Lokasi Agen", rowId: `mrandom`, description: `Tampilkan Lokasi Agen Terdekat`},
+                {title: "Lihat Informasi Terbaru", rowId: `mtextpro`, description: `Info Terkini Tentang Kami`},
+                {title: "Pembayaran Online", rowId: `mowner`, description: `Pembayaran Dengan Mudah`}
+                ]
+                },
+                ]
+                zens.sendListMsg(m.chat, kukiw, nyoutube, `*Hello Kak ${pushname}*!`, `Click Here`, sections, m, {quoted: fkontak})
+            }
+            break
+            case 'mgroup': {
+goup = `Hai Kak Silakan Isi Form Pendaftaran DiBawah ini
 
-    printer('speedtest-cli %s' % __version__)
-    printer('Python %s' % sys.version.replace('\n', ''))
-    sys.exit(0)
+Nama : 
+Nama Bus :
+Nomor HP : 
+Tujuan :
+Pembayaran Via :
 
+Screen Shot Bukti Pembayaran Ke CS Dibawah Ini`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
+            }
+            break
+      case 'mwebzone': {
+wbzone = `List Harga Tiket
 
-def csv_header(delimiter=','):
-    """Print the CSV Headers"""
+Medali Mas : Mulai Dari Harga 310 Sampai 320
+Gunung Harta : Mulai Dari Harga 320 sampai 340
+Agra Mas : Mulai Dari Harga 310 Sampai 330
+Pandawa87 : Mulai Dari Harga 330
+Keramat Jati : Mulai Dari 310 Sampai 630
+BandungExpress : Mulai Dari 300
+Angkasa Trans : Mulai Dari 260 
+Setiawan : Mulai Dari 260
+RestuMulia : Mulai Dari 275
+Lorena : Mulai Dari 620 Sampai 650`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mdownloader': {
+dwnloader = `List Jam Berangkat Bus
 
-    printer(SpeedtestResults.csv_header(delimiter=delimiter))
-    sys.exit(0)
+Medali Mas : Mulai Dari Jam 14:30 Sampai 15:30
+Gunung Harta : Mulai Dari Jam 14:30 sampai 15:30
+Agra Mas : Mulai Dari Jam 11:30
+Pandawa87 : Mulai Dari Jam 15:30
+Keramat Jati : Mulai Dari Jam 15:30
+BandungExpress : Mulai Dari Jam Jam 15:00
+Angkasa Trans : Mulai Dari Jam Jam 13:00
+Setiawan : Mulai Dari Jam Jam 13:00
+RestuMulia : Mulai Dari Jam Jam 13:00
+Lorena : Mulai Dari Jam Jam 16:00`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'msearch': {
+sarch = `Perlu Bantuan Silakan Click Tombol Di Bawah Ini`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mrandom': {
+rndom = `Jika Ingin Memesan Tiket Secara Offline Silakan Click Link https://goo.gl/maps/MdiW8H9kEsLHqGSv6`
+let buttons = [{ buttonId: 'daftardiri', buttonText: { displayText: 'Kembali Ke Dashboard' }, type: 1 },{ buttonId: 'owner', buttonText: { displayText: 'Kirim Bukti Ke CS' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: 'Pembayaran' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, goup, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mtextpro': {
+txtpro = `+--? *Text Pro Menu*
+¦
+¦? ${prefix}3dchristmas
+¦? ${prefix}3ddeepsea
+¦? ${prefix}americanflag
+¦? ${prefix}3dscifi
+¦? ${prefix}3drainbow
+¦? ${prefix}3dwaterpipe
+¦? ${prefix}halloweenskeleton
+¦? ${prefix}sketch
+¦? ${prefix}bluecircuit
+¦? ${prefix}space
+¦? ${prefix}metallic
+¦? ${prefix}fiction
+¦? ${prefix}greenhorror
+¦? ${prefix}transformer
+¦? ${prefix}berry
+¦? ${prefix}thunder
+¦? ${prefix}magma
+¦? ${prefix}3dcrackedstone
+¦? ${prefix}3dneonlight
+¦? ${prefix}impressiveglitch
+¦? ${prefix}naturalleaves
+¦? ${prefix}fireworksparkle
+¦? ${prefix}matrix
+¦? ${prefix}dropwater
+¦? ${prefix}harrypotter
+¦? ${prefix}foggywindow
+¦? ${prefix}neondevils
+¦? ${prefix}christmasholiday
+¦? ${prefix}3dgradient
+¦? ${prefix}blackpink
+¦? ${prefix}gluetext
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, txtpro, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mphotooxy': {
+potooxy = `+--? *Photo Oxy Menu*
+¦
+¦? ${prefix}shadow
+¦? ${prefix}romantic
+¦? ${prefix}smoke
+¦? ${prefix}burnpapper
+¦? ${prefix}naruto
+¦? ${prefix}lovemsg
+¦? ${prefix}grassmsg
+¦? ${prefix}lovetext
+¦? ${prefix}coffecup
+¦? ${prefix}butterfly
+¦? ${prefix}harrypotter
+¦? ${prefix}retrolol
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, potooxy, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mephoto': {
+ehoto = `+--? *Ephoto Menu*
+¦
+¦? ${prefix}ffcover
+¦? ${prefix}crossfire
+¦? ${prefix}galaxy
+¦? ${prefix}glass
+¦? ${prefix}neon
+¦? ${prefix}beach
+¦? ${prefix}blackpink
+¦? ${prefix}igcertificate
+¦? ${prefix}ytcertificate
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, ehoto, nyoutube, m, {quoted: fkontak})
+            }
+            break
+           case 'mfun': {
+mun = `+--? *Fun Menu*
+¦
+¦? ${prefix}simih
+¦? ${prefix}halah
+¦? ${prefix}hilih
+¦? ${prefix}huluh
+¦? ${prefix}heleh
+¦? ${prefix}holoh
+¦? ${prefix}jadian
+¦? ${prefix}jodohku
+¦? ${prefix}apakah
+¦? ${prefix}bisakah
+¦? ${prefix}kapan
+¦? ${prefix}slot
+¦? ${prefix}delttt
+¦? ${prefix}tictactoe
+¦? ${prefix}family100
+¦? ${prefix}tebak [option]
+¦? ${prefix}math [mode]
+¦? ${prefix}suitpvp [@tag]
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, mun, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mprimbon': {
+pimbon = `+--? *Primbon Menu*
+¦
+¦? ${prefix}nomorhoki
+¦? ${prefix}artimimpi
+¦? ${prefix}artinama
+¦? ${prefix}ramaljodoh
+¦? ${prefix}ramaljodohbali
+¦? ${prefix}suamiistri
+¦? ${prefix}ramalcinta
+¦? ${prefix}cocoknama
+¦? ${prefix}pasangan
+¦? ${prefix}jadiannikah
+¦? ${prefix}sifatusaha
+¦? ${prefix}rezeki
+¦? ${prefix}pekerjaan
+¦? ${prefix}nasib
+¦? ${prefix}penyakit
+¦? ${prefix}tarot
+¦? ${prefix}fengshui
+¦? ${prefix}haribaik
+¦? ${prefix}harisangar
+¦? ${prefix}harisial
+¦? ${prefix}nagahari
+¦? ${prefix}arahrezeki
+¦? ${prefix}peruntungan
+¦? ${prefix}weton
+¦? ${prefix}karakter
+¦? ${prefix}keberuntungan
+¦? ${prefix}memancing
+¦? ${prefix}masasubur
+¦? ${prefix}zodiak
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, pimbon, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mconvert': {
+cnvert = `+--? *Convert Menu*
+¦
+¦? ${prefix}attp
+¦? ${prefix}ttp
+¦? ${prefix}toimage
+¦? ${prefix}removebg
+¦? ${prefix}sticker
+¦? ${prefix}emojimix
+¦? ${prefix}emojimix2
+¦? ${prefix}tovideo
+¦? ${prefix}togif
+¦? ${prefix}tourl
+¦? ${prefix}tovn
+¦? ${prefix}tomp3
+¦? ${prefix}toaudio
+¦? ${prefix}ebinary
+¦? ${prefix}dbinary
+¦? ${prefix}styletext
+¦? ${prefix}smeme
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, cnvert, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mmain': {
+min = `+--? *Main Menu*
+¦
+¦? ${prefix}ping
+¦? ${prefix}owner
+¦? ${prefix}report
+¦? ${prefix}menu / ${prefix}help / ${prefix}?
+¦? ${prefix}delete
+¦? ${prefix}infochat
+¦? ${prefix}quoted
+¦? ${prefix}listpc
+¦? ${prefix}listgc
+¦? ${prefix}listonline
+¦? ${prefix}speedtest
+¦? ${prefix}=es
+¦? ${prefix}tinyurl
+¦? ${prefix}isgd
+¦? ${prefix}vurl
+¦? ${prefix}clp
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, min, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mdatabase': {
+dtbase = `+--? *Database Menu*
+¦
+¦? ${prefix}setcmd
+¦? ${prefix}listcmd
+¦? ${prefix}delcmd
+¦? ${prefix}lockcmd
+¦? ${prefix}addmsg
+¦? ${prefix}listmsg
+¦? ${prefix}getmsg
+¦? ${prefix}delmsg
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, dtbase, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'manonymous': {
+aonymous = `+--? *Anonymous Menu*
+¦
+¦? ${prefix}anonymous
+¦? ${prefix}start
+¦? ${prefix}next
+¦? ${prefix}keluar
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, aonymous, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mislamic': {
+islmic = `+--? *Islamic Menu*
+¦
+¦? ${prefix}iqra
+¦? ${prefix}hadist
+¦? ${prefix}alquran
+¦? ${prefix}juzamma
+¦? ${prefix}tafsirsurah
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, islmic, nyoutube, m, {quoted: fkontak})
+            }
+            break
+case 'mvoice': {
+vice = `+--? *Voice Changer*
+¦
+¦? ${prefix}bass
+¦? ${prefix}blown
+¦? ${prefix}deep
+¦? ${prefix}earrape
+¦? ${prefix}fast
+¦? ${prefix}fat
+¦? ${prefix}nightcore
+¦? ${prefix}reverse
+¦? ${prefix}robot
+¦? ${prefix}slow
+¦? ${prefix}tupai
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, vice, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'mowner': {
+oner = `+--? *Owner Menu*
+¦
+¦? ${prefix}react [emoji]
+¦? ${prefix}chat [option]
+¦? ${prefix}join [link]
+¦? ${prefix}leave
+¦? ${prefix}block @user
+¦? ${prefix}unblock @user
+¦? ${prefix}bcgroup [text]
+¦? ${prefix}bcall [text]
+¦? ${prefix}setppbot [image]
+¦? ${prefix}setexif
+¦? ${prefix}setmenu [option]
+¦
++-------????`
+let buttons = [{ buttonId: 'simplemenu', buttonText: { displayText: '??Back' }, type: 1 },{ buttonId: 'allmenu', buttonText: { displayText: '? List Menu' }, type: 1 },{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, oner, nyoutube, m, {quoted: fkontak})
+            }
+            break
+            case 'allmenu': {
+            let ownernya = ownernomer + '@s.whatsapp.net'
+            let me = m.sender
+            let ments = [ownernya, me, ini_mark]
+                anu = `*${ucapanWaktu}*\n*kak @${me.split('@')[0]}*\n*Powered*  : @${ini_mark.split('@')[0]}\n*Creator* : @${ownernya.split('@')[0]}
++--? *Group Menu*
+¦
+¦? ${prefix}linkgroup
+¦? ${prefix}ephemeral [option]
+¦? ${prefix}setppgc [image]
+¦? ${prefix}setname [text]
+¦? ${prefix}setdesc [text]
+¦? ${prefix}group [option]
+¦? ${prefix}editinfo [option]
+¦? ${prefix}add @user
+¦? ${prefix}kick @user
+¦? ${prefix}hidetag [text]
+¦? ${prefix}tagall [text]
+¦? ${prefix}antilink [on/off]
+¦? ${prefix}mute [on/off]
+¦? ${prefix}promote @user
+¦? ${prefix}demote @user
+¦? ${prefix}vote [text]
+¦? ${prefix}devote
+¦? ${prefix}upvote
+¦? ${prefix}cekvote
+¦? ${prefix}hapusvote
+¦
++-------????
++--? *Webzone Menu*
+¦
+¦? ${prefix}playstore
+¦? ${prefix}gsmarena
+¦? ${prefix}jadwalbioskop
+¦? ${prefix}nowplayingbioskop
+¦? ${prefix}aminio
+¦? ${prefix}wattpad
+¦? ${prefix}webtoons
+¦? ${prefix}drakor
+¦
++-------????
++--? *Downloader Menu*
+¦
+¦? ${prefix}tiktoknowm [url]
+¦? ${prefix}tiktokwm [url]
+¦? ${prefix}tiktokmp3 [url]
+¦? ${prefix}instagram [url]
+¦? ${prefix}twitter [url]
+¦? ${prefix}twittermp3 [url]
+¦? ${prefix}facebook [url]
+¦? ${prefix}pinterestdl [url]
+¦? ${prefix}ytmp3 [url]
+¦? ${prefix}ytmp4 [url]
+¦? ${prefix}getmusic [query]
+¦? ${prefix}getvideo [query]
+¦? ${prefix}umma [url]
+¦? ${prefix}joox [query]
+¦? ${prefix}soundcloud [url]
+¦
++-------????
++--? *Search Menu*
+¦
+¦? ${prefix}play [query]
+¦? ${prefix}yts [query]
+¦? ${prefix}google [query]
+¦? ${prefix}gimage [query]
+¦? ${prefix}pinterest [query]
+¦? ${prefix}wallpaper [query]
+¦? ${prefix}wikimedia [query]
+¦? ${prefix}ytsearch [query]
+¦? ${prefix}ringtone [query]
+¦? ${prefix}stalk [option] [query]
+¦
++-------????
++--? *Random Menu*
+¦
+¦? ${prefix}gbtku
+¦? ${prefix}coffe
+¦? ${prefix}quotesanime
+¦? ${prefix}motivasi
+¦? ${prefix}dilanquote
+¦? ${prefix}bucinquote
+¦? ${prefix}katasenja
+¦? ${prefix}puisi
+¦? ${prefix}couple
+¦? ${prefix}anime
+¦? ${prefix}waifu
+¦
++-------????
++--? *Text Pro Menu*
+¦
+¦? ${prefix}3dchristmas
+¦? ${prefix}3ddeepsea
+¦? ${prefix}americanflag
+¦? ${prefix}3dscifi
+¦? ${prefix}3drainbow
+¦? ${prefix}3dwaterpipe
+¦? ${prefix}halloweenskeleton
+¦? ${prefix}sketch
+¦? ${prefix}bluecircuit
+¦? ${prefix}space
+¦? ${prefix}metallic
+¦? ${prefix}fiction
+¦? ${prefix}greenhorror
+¦? ${prefix}transformer
+¦? ${prefix}berry
+¦? ${prefix}thunder
+¦? ${prefix}magma
+¦? ${prefix}3dcrackedstone
+¦? ${prefix}3dneonlight
+¦? ${prefix}impressiveglitch
+¦? ${prefix}naturalleaves
+¦? ${prefix}fireworksparkle
+¦? ${prefix}matrix
+¦? ${prefix}dropwater
+¦? ${prefix}harrypotter
+¦? ${prefix}foggywindow
+¦? ${prefix}neondevils
+¦? ${prefix}christmasholiday
+¦? ${prefix}3dgradient
+¦? ${prefix}blackpink
+¦? ${prefix}gluetext
+¦
++-------????
++--? *Photo Oxy Menu*
+¦
+¦? ${prefix}shadow
+¦? ${prefix}romantic
+¦? ${prefix}smoke
+¦? ${prefix}burnpapper
+¦? ${prefix}naruto
+¦? ${prefix}lovemsg
+¦? ${prefix}grassmsg
+¦? ${prefix}lovetext
+¦? ${prefix}coffecup
+¦? ${prefix}butterfly
+¦? ${prefix}harrypotter
+¦? ${prefix}retrolol
+¦
++-------????
++--? *Ephoto Menu*
+¦
+¦? ${prefix}ffcover
+¦? ${prefix}crossfire
+¦? ${prefix}galaxy
+¦? ${prefix}glass
+¦? ${prefix}neon
+¦? ${prefix}beach
+¦? ${prefix}blackpink
+¦? ${prefix}igcertificate
+¦? ${prefix}ytcertificate
+¦
++-------????
++--? *Fun Menu*
+¦
+¦? ${prefix}simih
+¦? ${prefix}halah
+¦? ${prefix}hilih
+¦? ${prefix}huluh
+¦? ${prefix}heleh
+¦? ${prefix}holoh
+¦? ${prefix}jadian
+¦? ${prefix}jodohku
+¦? ${prefix}apakah
+¦? ${prefix}bisakah
+¦? ${prefix}kapan
+¦? ${prefix}slot
+¦? ${prefix}delttt
+¦? ${prefix}tictactoe
+¦? ${prefix}family100
+¦? ${prefix}tebak [option]
+¦? ${prefix}math [mode]
+¦? ${prefix}suitpvp [@tag]
+¦
++-------????
++--? *Primbon Menu*
+¦
+¦? ${prefix}nomorhoki
+¦? ${prefix}artimimpi
+¦? ${prefix}artinama
+¦? ${prefix}ramaljodoh
+¦? ${prefix}ramaljodohbali
+¦? ${prefix}suamiistri
+¦? ${prefix}ramalcinta
+¦? ${prefix}cocoknama
+¦? ${prefix}pasangan
+¦? ${prefix}jadiannikah
+¦? ${prefix}sifatusaha
+¦? ${prefix}rezeki
+¦? ${prefix}pekerjaan
+¦? ${prefix}nasib
+¦? ${prefix}penyakit
+¦? ${prefix}tarot
+¦? ${prefix}fengshui
+¦? ${prefix}haribaik
+¦? ${prefix}harisangar
+¦? ${prefix}harisial
+¦? ${prefix}nagahari
+¦? ${prefix}arahrezeki
+¦? ${prefix}peruntungan
+¦? ${prefix}weton
+¦? ${prefix}karakter
+¦? ${prefix}keberuntungan
+¦? ${prefix}memancing
+¦? ${prefix}masasubur
+¦? ${prefix}zodiak
+¦
++-------????
++--? *Convert Menu*
+¦
+¦? ${prefix}attp
+¦? ${prefix}ttp
+¦? ${prefix}toimage
+¦? ${prefix}removebg
+¦? ${prefix}sticker
+¦? ${prefix}emojimix
+¦? ${prefix}emojimix2
+¦? ${prefix}tovideo
+¦? ${prefix}togif
+¦? ${prefix}tourl
+¦? ${prefix}tovn
+¦? ${prefix}tomp3
+¦? ${prefix}toaudio
+¦? ${prefix}ebinary
+¦? ${prefix}dbinary
+¦? ${prefix}styletext
+¦? ${prefix}smeme
+¦
++-------????
++--? *Main Menu*
+¦
+¦? ${prefix}ping
+¦? ${prefix}owner
+¦? ${prefix}report
+¦? ${prefix}menu / ${prefix}help / ${prefix}?
+¦? ${prefix}delete
+¦? ${prefix}infochat
+¦? ${prefix}quoted
+¦? ${prefix}listpc
+¦? ${prefix}listgc
+¦? ${prefix}listonline
+¦? ${prefix}speedtest
+¦? ${prefix}menfes
+¦? ${prefix}tinyurl
+¦? ${prefix}isgd
+¦? ${prefix}vurl
+¦? ${prefix}clp
+¦
++-------????
++--? *Database Menu*
+¦
+¦? ${prefix}setcmd
+¦? ${prefix}listcmd
+¦? ${prefix}delcmd
+¦? ${prefix}lockcmd
+¦? ${prefix}addmsg
+¦? ${prefix}listmsg
+¦? ${prefix}getmsg
+¦? ${prefix}delmsg
+¦
++-------????
++--? *Anonymous Menu*
+¦
+¦? ${prefix}anonymous
+¦? ${prefix}start
+¦? ${prefix}next
+¦? ${prefix}keluar
+¦
++-------????
++--? *Islamic Menu*
+¦
+¦? ${prefix}iqra
+¦? ${prefix}hadist
+¦? ${prefix}alquran
+¦? ${prefix}juzamma
+¦? ${prefix}tafsirsurah
+¦
++-------????
++--? *Voice Changer*
+¦
+¦? ${prefix}bass
+¦? ${prefix}blown
+¦? ${prefix}deep
+¦? ${prefix}earrape
+¦? ${prefix}fast
+¦? ${prefix}fat
+¦? ${prefix}nightcore
+¦? ${prefix}reverse
+¦? ${prefix}robot
+¦? ${prefix}slow
+¦? ${prefix}tupai
+¦
++-------????
++--? *Owner Menu*
+¦
+¦? ${prefix}react [emoji]
+¦? ${prefix}chat [option]
+¦? ${prefix}join [link]
+¦? ${prefix}leave
+¦? ${prefix}block @user
+¦? ${prefix}unblock @user
+¦? ${prefix}bcgroup [text]
+¦? ${prefix}bcall [text]
+¦? ${prefix}setppbot [image]
+¦? ${prefix}setexif
+¦? ${prefix}setmenu [option]
+¦
++-------????
+_Support kami_\n_Dengan Cara Berdonasi_`
+                let buttons = [{ buttonId: 'donasi', buttonText: { displayText: '? Donasi' }, type: 1 },{ buttonId: 'rules', buttonText: { displayText: '? Rules' }, type: 1 }]
+            await zens.sendButtonText(m.chat, buttons, anu, nyoutube, m, {mentions: ments, quoted: fkontak})
+            }
+            break
+case 'assalamualaikum': {
+               goblok = fs.readFileSync('./sound/salam.mp3')
+zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
+break
+case 'bot': {
+               list = ['./sound/oy.mp3','./sound/kenapa.mp3','./sound/iya.mp3']
+ random = list[Math.floor(Math.random() * list.length)]
+goblok = fs.readFileSync(random)
+zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
+break
+case 'kontol': {
+               goblok = fs.readFileSync('./sound/ASADE.mp3')
+zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
+break
+case 'menyesal': {
+               goblok = fs.readFileSync('./sound/menyesal.mp3')
+zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
+break
+case 'sc': {
+               goblok = fs.readFileSync('./sound/sc.mp3')
+zens.sendMessage(m.chat, {audio: goblok, mimetype:'audio/mpeg', ptt:true }, {quoted:m})}
+break
+            case 'sound1':
+case 'sound2':
+case 'sound3':
+case 'sound4':
+case 'sound5':
+case 'sound6':
+case 'sound7':
+case 'sound8':
+case 'sound9':
+case 'sound10':
+case 'sound11':
+case 'sound12':
+case 'sound13':
+case 'sound14':
+case 'sound15':
+case 'sound16':
+case 'sound17':
+case 'sound18':
+case 'sound19':
+case 'sound20':
+case 'sound21':
+case 'sound22':
+case 'sound23':
+case 'sound24':
+case 'sound25':
+case 'sound26':
+case 'sound27':
+case 'sound28':
+case 'sound29':
+case 'sound30':
+case 'sound31':
+case 'sound32':
+case 'sound33':
+case 'sound34':
+case 'sound35':
+case 'sound36':
+case 'sound37':
+case 'sound38':
+case 'sound39':
+case 'sound40':
+case 'sound41':
+case 'sound42':
+case 'sound43':
+case 'sound44':
+case 'sound45':
+case 'sound46':
+case 'sound47':
+case 'sound48':
+case 'sound49':
+case 'sound50':
+case 'sound51':
+case 'sound52':
+case 'sound53':
+case 'sound54':
+case 'sound55':
+case 'sound56':
+case 'sound57':
+case 'sound58':
+case 'sound59':
+case 'sound60':
+case 'sound61':
+case 'sound62':
+case 'sound63':
+case 'sound64':
+case 'sound65':
+case 'sound66':
+case 'sound67':
+case 'sound68':
+case 'sound69':
+case 'sound70':
+case 'sound71':
+case 'sound72':
+case 'sound73':
+case 'sound74':
+case 'sound75':
+case 'sound76':
+case 'sound77':
+case 'sound78':
+case 'sound79':
+case 'sound80':
+case 'sound81':
+case 'sound82':
+case 'sound83':
+case 'sound84':
+case 'sound85':
+case 'sound86':
+case 'sound87':
+case 'sound88':
+case 'sound89':
+case 'sound90':
+case 'sound91':
+case 'sound92':
+case 'sound93':
+case 'sound94':
+case 'sound95':
+case 'sound96':
+case 'sound97':
+case 'sound98':
+case 'sound99':
+case 'sound100':
+case 'sound101':
+case 'sound102':
+case 'sound103':
+case 'sound104':
+case 'sound105':
+case 'sound106':
+case 'sound107':
+case 'sound108':
+case 'sound109':
+case 'sound110':
+case 'sound111':
+case 'sound112':
+case 'sound113':
+case 'sound114':
+case 'sound115':
+case 'sound116':
+case 'sound117':
+case 'sound118':
+case 'sound119':
+case 'sound120':
+case 'sound121':
+case 'sound122':
+case 'sound123':
+case 'sound124':
+case 'sound125':
+case 'sound126':
+case 'sound127':
+case 'sound128':
+case 'sound129':
+case 'sound130':
+case 'sound131':
+case 'sound132':
+case 'sound133':
+case 'sound134':
+case 'sound135':
+case 'sound136':
+case 'sound137':
+case 'sound138':
+case 'sound139':
+case 'sound140':
+case 'sound141':
+case 'sound142':
+case 'sound143':
+case 'sound144':
+case 'sound145':
+case 'sound146':
+case 'sound147':
+case 'sound148':
+case 'sound149':
+case 'sound150':
+case 'sound151':
+case 'sound152':
+case 'sound153':
+case 'sound154':
+case 'sound155':
+case 'sound156':
+case 'sound157':
+case 'sound158':
+case 'sound159':
+case 'sound160':
+case 'sound161':
+zens_dev = await getBuffer(`https://github.com/DGXeon/Tiktokmusic-API/raw/master/tiktokmusic/${command}.mp3`)
+await zens.sendMessage(m.chat, { audio: zens_dev, mimetype: 'audio/mp4', ptt: true }, { quoted: m })     
+break
+            default:
+                if (budy.startsWith('=>')) {
+                    if (!isCreator) return m.reply(mess.owner)
+                    function Return(sul) {
+                        sat = JSON.stringify(sul, null, 2)
+                        bang = util.format(sat)
+                            if (sat == undefined) {
+                                bang = util.format(sul)
+                            }
+                            return m.reply(bang)
+                    }
+                    try {
+                        m.reply(util.format(eval(`(async () => { return ${budy.slice(3)} })()`)))
+                    } catch (e) {
+                        m.reply(String(e))
+                    }
+                }
 
+                if (budy.startsWith('>')) {
+                    if (!isCreator) return m.reply(mess.owner)
+                    try {
+                        let evaled = await eval(budy.slice(2))
+                        if (typeof evaled !== 'string') evaled = require('util').inspect(evaled)
+                        await m.reply(evaled)
+                    } catch (err) {
+                        await m.reply(String(err))
+                    }
+                }
 
-def parse_args():
-    """Function to handle building and parsing of command line arguments"""
-    description = (
-        'Command line interface for testing internet bandwidth using '
-        'speedtest.net.\n'
-        '------------------------------------------------------------'
-        '--------------\n'
-        'https://github.com/sivel/speedtest-cli')
+                if (budy.startsWith('$')) {
+                    if (!isCreator) return m.reply(mess.owner)
+                    exec(budy.slice(2), (err, stdout) => {
+                        if(err) return m.reply(err)
+                        if (stdout) return m.reply(stdout)
+                    })
+                }
+			
+		if (m.chat.endsWith('@s.whatsapp.net') && isCmd) {
+                    this.anonymous = this.anonymous ? this.anonymous : {}
+                    let room = Object.values(this.anonymous).find(room => [room.a, room.b].includes(m.sender) && room.state === 'CHATTING')
+                    if (room) {
+                        if (/^.*(next|leave|start)/.test(m.text)) return
+                        if (['.next', '.leave', '.stop', '.start', 'Cari Partner', 'Keluar', 'Lanjut', 'Stop'].includes(m.text)) return
+                        let other = [room.a, room.b].find(user => user !== m.sender)
+                        m.copyNForward(other, true, m.quoted && m.quoted.fromMe ? {
+                            contextInfo: {
+                                ...m.msg.contextInfo,
+                                forwardingScore: 0,
+                                isForwarded: true,
+                                participant: other
+                            }
+                        } : {})
+                    }
+                    return !0
+                }
+			
+		if (isCmd && budy.toLowerCase() != undefined) {
+		    if (m.chat.endsWith('broadcast')) return
+		    if (m.isBaileys) return
+		    let msgs = global.db.data.database
+		    if (!(budy.toLowerCase() in msgs)) return
+		    zens.copyNForward(m.chat, msgs[budy.toLowerCase()], true)
+		}
+        }
+        
 
-    parser = ArgParser(description=description)
-    # Give optparse.OptionParser an `add_argument` method for
-    # compatibility with argparse.ArgumentParser
-    try:
-        parser.add_argument = parser.add_option
-    except AttributeError:
-        pass
-    parser.add_argument('--no-download', dest='download', default=True,
-                        action='store_const', const=False,
-                        help='Do not perform download test')
-    parser.add_argument('--no-upload', dest='upload', default=True,
-                        action='store_const', const=False,
-                        help='Do not perform upload test')
-    parser.add_argument('--single', default=False, action='store_true',
-                        help='Only use a single connection instead of '
-                             'multiple. This simulates a typical file '
-                             'transfer.')
-    parser.add_argument('--bytes', dest='units', action='store_const',
-                        const=('byte', 8), default=('bit', 1),
-                        help='Display values in bytes instead of bits. Does '
-                             'not affect the image generated by --share, nor '
-                             'output from --json or --csv')
-    parser.add_argument('--share', action='store_true',
-                        help='Generate and provide a URL to the speedtest.net '
-                             'share results image, not displayed with --csv')
-    parser.add_argument('--simple', action='store_true', default=False,
-                        help='Suppress verbose output, only show basic '
-                             'information')
-    parser.add_argument('--csv', action='store_true', default=False,
-                        help='Suppress verbose output, only show basic '
-                             'information in CSV format. Speeds listed in '
-                             'bit/s and not affected by --bytes')
-    parser.add_argument('--csv-delimiter', default=',', type=PARSER_TYPE_STR,
-                        help='Single character delimiter to use in CSV '
-                             'output. Default ","')
-    parser.add_argument('--csv-header', action='store_true', default=False,
-                        help='Print CSV headers')
-    parser.add_argument('--json', action='store_true', default=False,
-                        help='Suppress verbose output, only show basic '
-                             'information in JSON format. Speeds listed in '
-                             'bit/s and not affected by --bytes')
-    parser.add_argument('--list', action='store_true',
-                        help='Display a list of speedtest.net servers '
-                             'sorted by distance')
-    parser.add_argument('--server', type=PARSER_TYPE_INT, action='append',
-                        help='Specify a server ID to test against. Can be '
-                             'supplied multiple times')
-    parser.add_argument('--exclude', type=PARSER_TYPE_INT, action='append',
-                        help='Exclude a server from selection. Can be '
-                             'supplied multiple times')
-    parser.add_argument('--mini', help='URL of the Speedtest Mini server')
-    parser.add_argument('--source', help='Source IP address to bind to')
-    parser.add_argument('--timeout', default=10, type=PARSER_TYPE_FLOAT,
-                        help='HTTP timeout in seconds. Default 10')
-    parser.add_argument('--secure', action='store_true',
-                        help='Use HTTPS instead of HTTP when communicating '
-                             'with speedtest.net operated servers')
-    parser.add_argument('--no-pre-allocate', dest='pre_allocate',
-                        action='store_const', default=True, const=False,
-                        help='Do not pre allocate upload data. Pre allocation '
-                             'is enabled by default to improve upload '
-                             'performance. To support systems with '
-                             'insufficient memory, use this option to avoid a '
-                             'MemoryError')
-    parser.add_argument('--version', action='store_true',
-                        help='Show the version number and exit')
-    parser.add_argument('--debug', action='store_true',
-                        help=ARG_SUPPRESS, default=ARG_SUPPRESS)
-
-    options = parser.parse_args()
-    if isinstance(options, tuple):
-        args = options[0]
-    else:
-        args = options
-    return args
-
-
-def validate_optional_args(args):
-    """Check if an argument was provided that depends on a module that may
-    not be part of the Python standard library.
-
-    If such an argument is supplied, and the module does not exist, exit
-    with an error stating which module is missing.
-    """
-    optional_args = {
-        'json': ('json/simplejson python module', json),
-        'secure': ('SSL support', HTTPSConnection),
+    } catch (err) {
+        m.reply(util.format(err))
     }
-
-    for arg, info in optional_args.items():
-        if getattr(args, arg, False) and info[1] is None:
-            raise SystemExit('%s is not installed. --%s is '
-                             'unavailable' % (info[0], arg))
+}
 
 
-def printer(string, quiet=False, debug=False, error=False, **kwargs):
-    """Helper function print a string with various features"""
-
-    if debug and not DEBUG:
-        return
-
-    if debug:
-        if sys.stdout.isatty():
-            out = '\033[1;30mDEBUG: %s\033[0m' % string
-        else:
-            out = 'DEBUG: %s' % string
-    else:
-        out = string
-
-    if error:
-        kwargs['file'] = sys.stderr
-
-    if not quiet:
-        print_(out, **kwargs)
-
-
-def shell():
-    """Run the full speedtest.net test"""
-
-    global DEBUG
-    shutdown_event = threading.Event()
-
-    signal.signal(signal.SIGINT, ctrl_c(shutdown_event))
-
-    args = parse_args()
-
-    # Print the version and exit
-    if args.version:
-        version()
-
-    if not args.download and not args.upload:
-        raise SpeedtestCLIError('Cannot supply both --no-download and '
-                                '--no-upload')
-
-    if len(args.csv_delimiter) != 1:
-        raise SpeedtestCLIError('--csv-delimiter must be a single character')
-
-    if args.csv_header:
-        csv_header(args.csv_delimiter)
-
-    validate_optional_args(args)
-
-    debug = getattr(args, 'debug', False)
-    if debug == 'SUPPRESSHELP':
-        debug = False
-    if debug:
-        DEBUG = True
-
-    if args.simple or args.csv or args.json:
-        quiet = True
-    else:
-        quiet = False
-
-    if args.csv or args.json:
-        machine_format = True
-    else:
-        machine_format = False
-
-    # Don't set a callback if we are running quietly
-    if quiet or debug:
-        callback = do_nothing
-    else:
-        callback = print_dots(shutdown_event)
-
-    printer('*• SPEEDTEST.NET*\n\n', quiet)
-    try:
-        speedtest = Speedtest(
-            source_address=args.source,
-            timeout=args.timeout,
-            secure=args.secure
-        )
-    except (ConfigRetrievalError,) + HTTP_ERRORS:
-        printer('Cannot retrieve speedtest configuration', error=True)
-        raise SpeedtestCLIError(get_exception())
-
-    if args.list:
-        try:
-            speedtest.get_servers()
-        except (ServersRetrievalError,) + HTTP_ERRORS:
-            printer('Cannot retrieve speedtest server list', error=True)
-            raise SpeedtestCLIError(get_exception())
-
-        for _, servers in sorted(speedtest.servers.items()):
-            for server in servers:
-                line = ('%(id)5s) %(sponsor)s (%(name)s, %(country)s) '
-                        '[%(d)0.2f km]' % server)
-                try:
-                    printer(line)
-                except IOError:
-                    e = get_exception()
-                    if e.errno != errno.EPIPE:
-                        raise
-        sys.exit(0)
-
-    printer('Testing from %(isp)s (%(ip)s)...' % speedtest.config['client'],
-            quiet)
-
-    if not args.mini:
-        printer('Retrieving speedtest.net server list...', quiet)
-        try:
-            speedtest.get_servers(servers=args.server, exclude=args.exclude)
-        except NoMatchedServers:
-            raise SpeedtestCLIError(
-                'No matched servers: %s' %
-                ', '.join('%s' % s for s in args.server)
-            )
-        except (ServersRetrievalError,) + HTTP_ERRORS:
-            printer('Cannot retrieve speedtest server list', error=True)
-            raise SpeedtestCLIError(get_exception())
-        except InvalidServerIDType:
-            raise SpeedtestCLIError(
-                '%s is an invalid server type, must '
-                'be an int' % ', '.join('%s' % s for s in args.server)
-            )
-
-        if args.server and len(args.server) == 1:
-            printer('Retrieving information for the selected server...', quiet)
-        else:
-            printer('Selecting best server based on ping...', quiet)
-        speedtest.get_best_server()
-    elif args.mini:
-        speedtest.get_best_server(speedtest.set_mini_server(args.mini))
-
-    results = speedtest.results
-
-    printer('Hosted by %(sponsor)s (%(name)s) [%(d)0.2f km]: '
-            '%(latency)s ms' % results.server, quiet)
-
-    if args.download:
-        printer('Testing download speed\n', quiet,
-                end=('', '\n')[bool(debug)])
-        speedtest.download(
-            callback=callback,
-            threads=(None, 1)[args.single]
-        )
-        printer('Download: %0.2f M%s/s' %
-                ((results.download / 1000.0 / 1000.0) / args.units[1],
-                 args.units[0]),
-                quiet)
-    else:
-        printer('Skipping download test', quiet)
-
-    if args.upload:
-        printer('Testing upload speed\n', quiet,
-                end=('', '\n')[bool(debug)])
-        speedtest.upload(
-            callback=callback,
-            pre_allocate=args.pre_allocate,
-            threads=(None, 1)[args.single]
-        )
-        printer('Upload: %0.2f M%s/s' %
-                ((results.upload / 1000.0 / 1000.0) / args.units[1],
-                 args.units[0]),
-                quiet)
-    else:
-        printer('Skipping upload test', quiet)
-
-    printer('Results:\n%r' % results.dict(), debug=True)
-
-    if not args.simple and args.share:
-        results.share()
-
-    if args.simple:
-        printer('Ping: %s ms\nDownload: %0.2f M%s/s\nUpload: %0.2f M%s/s' %
-                (results.ping,
-                 (results.download / 1000.0 / 1000.0) / args.units[1],
-                 args.units[0],
-                 (results.upload / 1000.0 / 1000.0) / args.units[1],
-                 args.units[0]))
-    elif args.csv:
-        printer(results.csv(delimiter=args.csv_delimiter))
-    elif args.json:
-        printer(results.json())
-
-    if args.share and not machine_format:
-        printer('Share results: %s' % results.share())
-
-
-def main():
-    try:
-        shell()
-    except KeyboardInterrupt:
-        printer('\nCancelling...', error=True)
-    except (SpeedtestException, SystemExit):
-        e = get_exception()
-        # Ignore a successful exit, or argparse exit
-        if getattr(e, 'code', 1) not in (0, 2):
-            msg = '%s' % e
-            if not msg:
-                msg = '%r' % e
-            raise SystemExit('ERROR: %s' % msg)
-
-
-if __name__ == '__main__':
-    main()
+let file = require.resolve(__filename)
+fs.watchFile(file, () => {
+	fs.unwatchFile(file)
+	console.log(chalk.redBright(`Update ${__filename}`))
+	delete require.cache[file]
+	require(file)
+})
